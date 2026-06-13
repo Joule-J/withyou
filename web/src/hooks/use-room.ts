@@ -116,8 +116,16 @@ export function useRoom(initialRoomCode: string | null) {
     socketRef.current?.emit("queue:add", { musicUrls });
   }, []);
 
+  const replaceQueueTracks = useCallback((musicUrls: string[]) => {
+    socketRef.current?.emit("queue:replace", { musicUrls });
+  }, []);
+
   const advanceQueue = useCallback(() => {
     socketRef.current?.emit("queue:advance");
+  }, []);
+
+  const previousQueue = useCallback(() => {
+    socketRef.current?.emit("queue:previous");
   }, []);
 
   const serverNow = useCallback(() => Date.now() + serverOffsetMs, [serverOffsetMs]);
@@ -144,7 +152,9 @@ export function useRoom(initialRoomCode: string | null) {
     joinRoom,
     sendPlayerCommand,
     addQueueTracks,
+    replaceQueueTracks,
     advanceQueue,
+    previousQueue,
     leaveRoom,
   };
 }

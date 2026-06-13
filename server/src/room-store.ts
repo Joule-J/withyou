@@ -10,6 +10,7 @@ import type {
   RoomSnapshot,
 } from "./types.js";
 import { parseMusicUrl } from "./schemas.js";
+import { resolveTrackTitle } from "./track-metadata.js";
 
 const ROOM_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
@@ -18,6 +19,7 @@ export type StoreOptions = {
   roomCodeLength: number;
   now?: () => number;
   codeGenerator?: () => string;
+  resolveTrackTitle?: (videoId: string) => Promise<string | null>;
 };
 
 export class RoomStore {
@@ -26,12 +28,14 @@ export class RoomStore {
   private readonly roomCodeLength: number;
   private readonly now: () => number;
   private readonly codeGenerator?: () => string;
+  private readonly titleResolver: (videoId: string) => Promise<string | null>;
 
   constructor(options: StoreOptions) {
     this.roomCapacity = options.roomCapacity;
     this.roomCodeLength = options.roomCodeLength;
     this.now = options.now ?? Date.now;
     this.codeGenerator = options.codeGenerator;
+    this.titleResolver = options.resolveTrackTitle ?? resolveTrackTitle;
   }
 
   createRoom(nickname: string, socketId: string) {
@@ -110,7 +114,7 @@ export class RoomStore {
     return { room, removed, newHostId };
   }
 
-  applyPlayerCommand(code: string, participantId: string, command: PlayerCommand): PlaybackState {
+  async applyPlayerCommand(code: string, participantId: string, command: PlayerCommand): Promise<PlaybackState> {
     const room = this.requireRoom(code);
     if (room.hostParticipantId !== participantId) {
       throw new StoreError("HOST_ONLY", "Bu islemi yalnizca host yapabilir.");
@@ -121,6 +125,7 @@ export class RoomStore {
       throw new StoreError("INVALID_MUSIC_URL", "Gecersiz YouTube Music adresi.");
     }
 
+    const resolvedTitle = await this.resolveTitle(parsedUrl.videoId, command.title);
     const previous = room.playback;
     const isPlaying =
       command.type === "play"
@@ -135,7 +140,7 @@ export class RoomStore {
       revision: (previous?.revision ?? 0) + 1,
       videoId: command.videoId,
       musicUrl: parsedUrl.normalizedUrl,
-      title: command.title,
+      title: resolvedTitle,
       isPlaying,
       positionSeconds: command.positionSeconds,
       updatedAtServerMs: this.now(),
@@ -144,23 +149,33 @@ export class RoomStore {
     return room.playback;
   }
 
-  addQueueTracks(code: string, participantId: string, musicUrls: string[]): void {
+  async addQueueTracks(code: string, participantId: string, musicUrls: string[]): Promise<void> {
     const room = this.requireRoom(code);
     const participant = this.requireHost(room, participantId);
-    const tracks = musicUrls.map((musicUrl): QueueTrack => {
+    const tracks = await Promise.all(musicUrls.map(async (musicUrl): Promise<QueueTrack> => {
       const parsed = parseMusicUrl(musicUrl);
       if (!parsed) throw new StoreError("INVALID_MUSIC_URL", "Gecersiz YouTube Music adresi.");
+      const title = await this.resolveTitle(parsed.videoId);
       return {
         id: randomUUID(),
         videoId: parsed.videoId,
         musicUrl: parsed.normalizedUrl,
+        title,
         addedByParticipantId: participant.id,
         addedByName: participant.nickname,
         addedAt: this.now(),
       };
-    });
+    }));
 
     room.queue.push(...tracks);
+  }
+
+  async replaceQueueTracks(code: string, participantId: string, musicUrls: string[]): Promise<void> {
+    const room = this.requireRoom(code);
+    this.requireHost(room, participantId);
+    room.queue = [];
+    room.activeQueueItemId = null;
+    await this.addQueueTracks(code, participantId, musicUrls);
   }
 
   advanceQueue(code: string, participantId: string): PlaybackState | null {
@@ -171,6 +186,19 @@ export class RoomStore {
     const currentIndex = room.queue.findIndex((track) => track.id === room.activeQueueItemId);
     const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % room.queue.length : 0;
     return this.playQueueTrack(room, room.queue[nextIndex]);
+  }
+
+  previousQueue(code: string, participantId: string): PlaybackState | null {
+    const room = this.requireRoom(code);
+    this.requireHost(room, participantId);
+    if (room.queue.length === 0) return null;
+
+    const currentIndex = room.queue.findIndex((track) => track.id === room.activeQueueItemId);
+    const previousIndex =
+      currentIndex >= 0
+        ? (currentIndex - 1 + room.queue.length) % room.queue.length
+        : Math.max(0, room.queue.length - 1);
+    return this.playQueueTrack(room, room.queue[previousIndex]);
   }
 
   snapshot(room: Room): RoomSnapshot {
@@ -218,6 +246,11 @@ export class RoomStore {
       updatedAtServerMs: this.now(),
     };
     return room.playback;
+  }
+
+  private async resolveTitle(videoId: string, fallback?: string): Promise<string> {
+    const resolved = await this.titleResolver(videoId);
+    return resolved ?? fallback?.trim() ?? videoId;
   }
 
   private requireRoom(code: string): Room {

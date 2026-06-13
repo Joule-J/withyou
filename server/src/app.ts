@@ -6,6 +6,8 @@ import express from "express";
 import { Server, type Socket } from "socket.io";
 import type { Config } from "./config.js";
 import { originAllowed } from "./config.js";
+import { createPlaylistRepository } from "./playlist-repository.js";
+import { PlaylistService } from "./playlist-service.js";
 import { FixedWindowRateLimiter } from "./rate-limit.js";
 import { RoomStore, StoreError } from "./room-store.js";
 import {
@@ -14,6 +16,7 @@ import {
   joinRoomSchema,
   leaveRoomSchema,
   playerCommandSchema,
+  playlistSaveSchema,
   queueAddSchema,
   reconnectRoomSchema,
   stateReportSchema,
@@ -33,8 +36,34 @@ export type AppInstance = {
 export function createApp(config: Config): AppInstance {
   const app = express();
   app.use(cors());
+  app.use(express.json());
+  const playlistService = new PlaylistService(createPlaylistRepository());
   app.get("/health", (_request, response) => {
     response.json({ ok: true, rooms: store.rooms.size });
+  });
+  app.get("/api/playlists", async (_request, response) => {
+    response.json({ playlists: await playlistService.listPlaylists() });
+  });
+  app.post("/api/playlists", async (request, response) => {
+    const parsed = playlistSaveSchema.safeParse(request.body);
+    if (!parsed.success) {
+      response.status(400).json({ message: "Gecersiz liste verisi." });
+      return;
+    }
+    try {
+      const playlist = await playlistService.savePlaylist(parsed.data.name, parsed.data.musicUrls);
+      response.json({ playlist });
+    } catch (error) {
+      response.status(400).json({ message: mapPlaylistError(error) });
+    }
+  });
+  app.delete("/api/playlists/:playlistId", async (request, response) => {
+    try {
+      await playlistService.deletePlaylist(request.params.playlistId);
+      response.status(204).end();
+    } catch {
+      response.status(404).json({ message: "Liste bulunamadi." });
+    }
   });
 
   const webDistDir = path.resolve(process.cwd(), config.webDistDir);
@@ -72,7 +101,7 @@ export function createApp(config: Config): AppInstance {
     const commandLimiter = new FixedWindowRateLimiter(10, 1_000);
 
     socket.on("room:create", (payload) => {
-      handle(socket, createRoomSchema, payload, (data) => {
+      void handle(socket, createRoomSchema, payload, async (data) => {
         enforceIpLimit(socket, ipLimiter);
         leaveCurrentSession(socket, io, store, disconnectTimers);
         const { room, participant } = store.createRoom(data.nickname, socket.id);
@@ -87,7 +116,7 @@ export function createApp(config: Config): AppInstance {
     });
 
     socket.on("room:join", (payload) => {
-      handle(socket, joinRoomSchema, payload, (data) => {
+      void handle(socket, joinRoomSchema, payload, async (data) => {
         enforceIpLimit(socket, ipLimiter);
         leaveCurrentSession(socket, io, store, disconnectTimers);
         const { room, participant } = store.joinRoom(data.roomCode, data.nickname, socket.id);
@@ -103,7 +132,7 @@ export function createApp(config: Config): AppInstance {
     });
 
     socket.on("room:reconnect", (payload) => {
-      handle(socket, reconnectRoomSchema, payload, (data) => {
+      void handle(socket, reconnectRoomSchema, payload, async (data) => {
         leaveCurrentSession(socket, io, store, disconnectTimers);
         const { room, participant } = store.reconnect(
           data.roomCode,
@@ -124,7 +153,7 @@ export function createApp(config: Config): AppInstance {
     });
 
     socket.on("room:leave", (payload) => {
-      handle(socket, leaveRoomSchema, payload, (data) => {
+      void handle(socket, leaveRoomSchema, payload, async (data) => {
         const session = getSession(socket);
         if (!session || session.roomCode !== data.roomCode) return;
         removeSessionParticipant(socket, io, store, disconnectTimers);
@@ -136,24 +165,34 @@ export function createApp(config: Config): AppInstance {
         emitError(socket, "RATE_LIMITED", "Cok fazla komut gonderildi.");
         return;
       }
-      handle(socket, playerCommandSchema, payload, (data) => {
+      void handle(socket, playerCommandSchema, payload, async (data) => {
         const session = requireSession(socket);
-        const playback = store.applyPlayerCommand(session.roomCode, session.participantId, data);
+        const playback = await store.applyPlayerCommand(session.roomCode, session.participantId, data);
         io.to(session.roomCode).emit("player:state", playback);
       });
     });
 
     socket.on("player:state-report", (payload) => {
-      handle(socket, stateReportSchema, payload, () => {
+      void handle(socket, stateReportSchema, payload, async () => {
         requireSession(socket);
         // Reserved for diagnostics; playback authority remains with host commands.
       });
     });
 
     socket.on("queue:add", (payload) => {
-      handle(socket, queueAddSchema, payload, (data) => {
+      void handle(socket, queueAddSchema, payload, async (data) => {
         const session = requireSession(socket);
-        store.addQueueTracks(session.roomCode, session.participantId, data.musicUrls);
+        await store.addQueueTracks(session.roomCode, session.participantId, data.musicUrls);
+        const room = store.rooms.get(session.roomCode);
+        if (!room) throw new RequestError("ROOM_NOT_FOUND", "Oda bulunamadi.");
+        io.to(session.roomCode).emit("room:snapshot", store.snapshot(room));
+      });
+    });
+
+    socket.on("queue:replace", (payload) => {
+      void handle(socket, queueAddSchema, payload, async (data) => {
+        const session = requireSession(socket);
+        await store.replaceQueueTracks(session.roomCode, session.participantId, data.musicUrls);
         const room = store.rooms.get(session.roomCode);
         if (!room) throw new RequestError("ROOM_NOT_FOUND", "Oda bulunamadi.");
         io.to(session.roomCode).emit("room:snapshot", store.snapshot(room));
@@ -161,7 +200,7 @@ export function createApp(config: Config): AppInstance {
     });
 
     socket.on("queue:advance", () => {
-      handle(socket, { safeParse: () => ({ success: true as const, data: undefined }) }, undefined, () => {
+      void handle(socket, { safeParse: () => ({ success: true as const, data: undefined }) }, undefined, async () => {
         const session = requireSession(socket);
         const playback = store.advanceQueue(session.roomCode, session.participantId);
         const room = store.rooms.get(session.roomCode);
@@ -171,8 +210,19 @@ export function createApp(config: Config): AppInstance {
       });
     });
 
+    socket.on("queue:previous", () => {
+      void handle(socket, { safeParse: () => ({ success: true as const, data: undefined }) }, undefined, async () => {
+        const session = requireSession(socket);
+        const playback = store.previousQueue(session.roomCode, session.participantId);
+        const room = store.rooms.get(session.roomCode);
+        if (!room) throw new RequestError("ROOM_NOT_FOUND", "Oda bulunamadi.");
+        io.to(session.roomCode).emit("room:snapshot", store.snapshot(room));
+        if (playback) io.to(session.roomCode).emit("player:state", playback);
+      });
+    });
+
     socket.on("clock:ping", (payload) => {
-      handle(socket, clockPingSchema, payload, (data) => {
+      void handle(socket, clockPingSchema, payload, async (data) => {
         socket.emit("clock:pong", {
           clientSentAtMs: data.clientSentAtMs,
           serverTimeMs: Date.now(),
@@ -205,16 +255,14 @@ function handle<T>(
   socket: Socket,
   schema: { safeParse: (payload: unknown) => { success: true; data: T } | { success: false; error: unknown } },
   payload: unknown,
-  action: (data: T) => void,
-) {
+  action: (data: T) => void | Promise<void>,
+): Promise<void> {
   const parsed = schema.safeParse(payload);
   if (!parsed.success) {
     emitError(socket, "INVALID_PAYLOAD", "Gecersiz istek.");
-    return;
+    return Promise.resolve();
   }
-  try {
-    action(parsed.data);
-  } catch (error) {
+  return Promise.resolve(action(parsed.data)).catch((error) => {
     if (error instanceof StoreError) {
       emitError(socket, error.code, error.message);
       return;
@@ -225,7 +273,7 @@ function handle<T>(
     }
     console.error(error);
     emitError(socket, "INTERNAL_ERROR", "Sunucu hatasi.");
-  }
+  });
 }
 
 function enforceIpLimit(socket: Socket, limiter: FixedWindowRateLimiter) {
@@ -306,4 +354,12 @@ class RequestError extends Error {
   ) {
     super(message);
   }
+}
+
+function mapPlaylistError(error: unknown): string {
+  if (!(error instanceof Error)) return "Liste kaydedilemedi.";
+  if (error.message === "LIST_NAME_REQUIRED") return "Liste ismi gerekli.";
+  if (error.message === "LIST_TRACKS_REQUIRED") return "Listede en az bir sarki olmali.";
+  if (error.message === "INVALID_MUSIC_URL") return "Listede gecersiz YouTube Music baglantisi var.";
+  return "Liste kaydedilemedi.";
 }

@@ -87,6 +87,43 @@ describe("Socket.IO room flow", () => {
       queue: [{ videoId: "dQw4w9WgXcQ" }, { videoId: "y8MArfXrn80" }],
     });
   });
+
+  it("moves to the previous queued track", async () => {
+    const app = createApp({
+      port: 0,
+      roomCapacity: 10,
+      reconnectGraceMs: 20,
+      roomCodeLength: 6,
+      allowedOrigins: ["http://localhost:*"],
+      webDistDir: "../web/dist",
+    });
+    servers.push(app);
+    await new Promise<void>((resolve) => app.httpServer.listen(0, resolve));
+    const port = (app.httpServer.address() as AddressInfo).port;
+
+    const host = connect(port);
+    sockets.push(host);
+    await waitFor(host, "connect");
+
+    host.emit("room:create", { nickname: "Host" });
+    await waitFor(host, "room:joined");
+
+    host.emit("queue:add", {
+      musicUrls: [
+        "https://music.youtube.com/watch?v=dQw4w9WgXcQ",
+        "https://music.youtube.com/watch?v=y8MArfXrn80",
+      ],
+    });
+    await waitFor(host, "room:snapshot");
+
+    host.emit("queue:advance");
+    await waitFor(host, "player:state");
+
+    host.emit("queue:previous");
+    await expect(waitFor<{ videoId: string }>(host, "player:state")).resolves.toMatchObject({
+      videoId: "y8MArfXrn80",
+    });
+  });
 });
 
 function connect(port: number): Socket {

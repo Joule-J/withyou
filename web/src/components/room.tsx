@@ -1,4 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import {
+  deletePlaylist as deleteNamedPlaylist,
+  listPlaylists,
+  savePlaylist as persistPlaylist,
+  type Playlist,
+} from "../lib/playlists";
 import { parseMusicUrl } from "../lib/music-url";
 import {
   POST_ACTION_SETTLE_MS,
@@ -18,8 +24,9 @@ type Props = {
   error: string | null;
   serverNow: () => number;
   onCommand: (command: PlayerCommand) => void;
-  onAddQueueTracks: (musicUrls: string[]) => void;
+  onReplaceQueueTracks: (musicUrls: string[]) => void;
   onAdvanceQueue: () => void;
+  onPreviousQueue: () => void;
   onLeave: () => void;
 };
 
@@ -30,17 +37,22 @@ export function Room({
   error,
   serverNow,
   onCommand,
-  onAddQueueTracks,
+  onReplaceQueueTracks,
   onAdvanceQueue,
+  onPreviousQueue,
   onLeave,
 }: Props) {
   const playerRef = useRef<YouTubePlayerHandle>(null);
   const [playerReady, setPlayerReady] = useState(false);
   const [musicUrl, setMusicUrl] = useState("");
   const [queueDraft, setQueueDraft] = useState("");
+  const [playlistName, setPlaylistName] = useState("");
   const [linkError, setLinkError] = useState<string | null>(null);
-  const [queueError, setQueueError] = useState<string | null>(null);
+  const [playlistError, setPlaylistError] = useState<string | null>(null);
   const [playerError, setPlayerError] = useState<string | null>(null);
+  const [playlists, setPlaylists] = useState<Playlist[]>([]);
+  const [playlistBusy, setPlaylistBusy] = useState(false);
+  const [selectedPlaylistId, setSelectedPlaylistId] = useState<string | null>(null);
   const [needsUnlock, setNeedsUnlock] = useState(false);
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -54,6 +66,19 @@ export function Room({
   const participants = snapshot.participants ?? [];
   const queue = snapshot.queue ?? [];
   const activeQueueItemId = snapshot.activeQueueItemId ?? null;
+  const { previousTrack, nextTrack } = queueNeighbors(queue, activeQueueItemId);
+
+  const refreshPlaylists = useCallback(async () => {
+    setPlaylistBusy(true);
+    try {
+      setPlaylists(await listPlaylists());
+      setPlaylistError(null);
+    } catch {
+      setPlaylistError("Listeler yuklenemedi.");
+    } finally {
+      setPlaylistBusy(false);
+    }
+  }, []);
 
   const applyPlayback = useCallback(
     (mode: "snapshot" | "drift" = "snapshot") => {
@@ -104,6 +129,10 @@ export function Room({
     },
     [playback, playerReady, serverNow],
   );
+
+  useEffect(() => {
+    void refreshPlaylists();
+  }, [refreshPlaylists]);
 
   useEffect(() => {
     applyPlayback("snapshot");
@@ -166,21 +195,29 @@ export function Room({
     setMusicUrl("");
   }
 
-  function submitQueue(event: FormEvent) {
+  async function submitPlaylist(event: FormEvent) {
     event.preventDefault();
     const urls = extractMusicUrls(queueDraft);
-    if (urls.length === 0) {
-      setQueueError("En az bir YouTube Music bağlantısı yapıştır.");
+    if (!playlistName.trim()) {
+      setPlaylistError("Liste ismi gir.");
       return;
     }
-    if (urls.some((url) => !parseMusicUrl(url))) {
-      setQueueError("Listede geçersiz YouTube Music bağlantısı var.");
+    if (urls.length === 0) {
+      setPlaylistError("Listeye en az bir YouTube Music baglantisi ekle.");
       return;
     }
 
-    setQueueError(null);
-    onAddQueueTracks(urls);
-    setQueueDraft("");
+    setPlaylistBusy(true);
+    try {
+      const playlist = await persistPlaylist(playlistName, urls);
+      setPlaylists((existing) => [playlist, ...existing.filter((item) => item.id !== playlist.id)]);
+      setSelectedPlaylistId(playlist.id);
+      setPlaylistError(null);
+    } catch {
+      setPlaylistError("Liste kaydedilemedi.");
+    } finally {
+      setPlaylistBusy(false);
+    }
   }
 
   function copyInvite() {
@@ -197,6 +234,38 @@ export function Room({
   function skipQueueTrack() {
     if (!isHost || queue.length === 0) return;
     onAdvanceQueue();
+  }
+
+  function previousQueueTrack() {
+    if (!isHost || queue.length === 0) return;
+    onPreviousQueue();
+  }
+
+  function applyPlaylist(playlist: Playlist) {
+    setSelectedPlaylistId(playlist.id);
+    setPlaylistName(playlist.name);
+    setQueueDraft(playlist.tracks.map((track) => track.musicUrl).join("\n"));
+    if (isHost) {
+      onReplaceQueueTracks(playlist.tracks.map((track) => track.musicUrl));
+    }
+  }
+
+  async function removePlaylist(playlistId: string) {
+    setPlaylistBusy(true);
+    try {
+      await deleteNamedPlaylist(playlistId);
+      setPlaylists((existing) => existing.filter((playlist) => playlist.id !== playlistId));
+      if (selectedPlaylistId === playlistId) {
+        setSelectedPlaylistId(null);
+        setPlaylistName("");
+        setQueueDraft("");
+      }
+      setPlaylistError(null);
+    } catch {
+      setPlaylistError("Liste silinemedi.");
+    } finally {
+      setPlaylistBusy(false);
+    }
   }
 
   return (
@@ -243,12 +312,15 @@ export function Room({
           )}
 
           <div className="track-meta">
-            <div>
+            <div className="track-meta-copy">
               <span>Şimdi çalıyor</span>
               <strong>{playback?.title || playback?.videoId || "Host henüz bir şarkı seçmedi"}</strong>
+              <small>{playback ? "Odadaki herkes bu parçaya senkronize olur." : "Bir bağlantı ekleyince oynatıcı burada başlayacak."}</small>
             </div>
             {playback ? (
-              <a href={playback.musicUrl} target="_blank" rel="noreferrer">YouTube Music</a>
+              <div className="track-meta-actions">
+                <a href={playback.musicUrl} target="_blank" rel="noreferrer">YouTube Music</a>
+              </div>
             ) : null}
           </div>
 
@@ -272,8 +344,11 @@ export function Room({
           {isHost ? (
             <div className="host-controls">
               <form className="track-form" onSubmit={submitTrack}>
-                <label htmlFor="music-url">YouTube Music bağlantısı</label>
-                <div>
+                <div className="form-heading">
+                  <label htmlFor="music-url">Yeni şarkı aç</label>
+                  <p>Linki yapıştır, ismi otomatik çekilsin.</p>
+                </div>
+                <div className="track-form-row">
                   <input
                     id="music-url"
                     type="url"
@@ -286,43 +361,84 @@ export function Room({
                 {linkError ? <p className="error-message" role="alert">{linkError}</p> : null}
               </form>
 
-              <div className="transport-controls">
-                <button type="button" disabled={!playback} onClick={() => command("play")}>Oynat</button>
-                <button type="button" disabled={!playback} onClick={() => command("pause")}>Duraklat</button>
-                <button type="button" disabled={queue.length === 0} onClick={skipQueueTrack}>
-                  Sonrakini geç
-                </button>
-              </div>
-
-              <div className="seek-control">
-                <div className="timeline-shell">
-                  <div className="timeline-readout">
-                    <span>{formatTime(seekValue)}</span>
-                    <span>{formatTime(duration)}</span>
+                <div className="transport-card">
+                  <div className="transport-card-head">
+                    <span>Oynatma Kontrolleri</span>
+                    <small>{playback ? "Host olarak çalmayı sen yönetiyorsun." : "Önce bir şarkı aç."}</small>
                   </div>
-                  <div className="timeline-track">
-                    <span className="timeline-fill" style={{ width: `${timelinePercent(seekValue, duration)}%` }} />
-                    <span className="timeline-cursor" style={{ left: `${timelinePercent(seekValue, duration)}%` }} />
-                    <div className="timeline-ticks" aria-hidden="true">
-                      {Array.from({ length: 9 }).map((_, index) => <i key={index} />)}
-                    </div>
-                    <input
-                      id="seek-range"
-                      aria-label="Oynatma zamanı"
-                      type="range"
-                      min="0"
-                      max={Math.max(duration, 1)}
-                      step="1"
-                      value={Math.min(seekValue, Math.max(duration, 1))}
+
+                  <div className="transport-controls">
+                    <button
+                      type="button"
+                      className="transport-icon"
+                      disabled={queue.length === 0}
+                      onClick={previousQueueTrack}
+                      aria-label="Önceki şarkı"
+                    >
+                      {"<<"}
+                    </button>
+                    <button
+                      type="button"
+                      className="transport-icon transport-primary"
                       disabled={!playback}
-                      onChange={(event) => setSeekValue(Number(event.target.value))}
-                    />
+                      onClick={() => command(playback?.isPlaying ? "pause" : "play")}
+                      aria-label={playback?.isPlaying ? "Duraklat" : "Oynat"}
+                    >
+                      {playback?.isPlaying ? "||" : ">"}
+                    </button>
+                    <button
+                      type="button"
+                      className="transport-icon"
+                      disabled={queue.length === 0}
+                      onClick={skipQueueTrack}
+                      aria-label="Sonraki şarkı"
+                    >
+                      {">>"}
+                    </button>
+                  </div>
+
+                  <div className="seek-stack">
+                    <div className="queue-preview-card prev">
+                      <span>Önceki</span>
+                      <strong>{previousTrack?.title || previousTrack?.videoId || "Yok"}</strong>
+                    </div>
+
+                    <div className="seek-control">
+                      <div className="timeline-shell">
+                        <div className="timeline-readout">
+                          <span>{formatTime(seekValue)}</span>
+                          <span>{formatTime(duration)}</span>
+                        </div>
+                        <div className="timeline-track">
+                          <span className="timeline-fill" style={{ width: `${timelinePercent(seekValue, duration)}%` }} />
+                          <span className="timeline-cursor" style={{ left: `${timelinePercent(seekValue, duration)}%` }} />
+                          <div className="timeline-ticks" aria-hidden="true">
+                            {Array.from({ length: 9 }).map((_, index) => <i key={index} />)}
+                          </div>
+                          <input
+                            id="seek-range"
+                            aria-label="Oynatma zamanı"
+                            type="range"
+                            min="0"
+                            max={Math.max(duration, 1)}
+                            step="1"
+                            value={Math.min(seekValue, Math.max(duration, 1))}
+                            disabled={!playback}
+                            onChange={(event) => setSeekValue(Number(event.target.value))}
+                          />
+                        </div>
+                      </div>
+                      <button className="seek-commit" disabled={!playback} onClick={() => command("seek", seekValue)}>
+                        Bu zamana git
+                      </button>
+                    </div>
+
+                    <div className="queue-preview-card next">
+                      <span>Sonraki</span>
+                      <strong>{nextTrack?.title || nextTrack?.videoId || "Yok"}</strong>
+                    </div>
                   </div>
                 </div>
-                <button disabled={!playback} onClick={() => command("seek", seekValue)}>
-                  Bu zamana git
-                </button>
-              </div>
             </div>
           ) : (
             <p className="guest-note">Müziği host kontrol ediyor. Senkronizasyon görünür fark oluştuğunda kendini toplar.</p>
@@ -350,13 +466,20 @@ export function Room({
 
           <section className="queue-panel">
             <div className="panel-title">
-              <h2>Şarkı Sırası</h2>
-              <span>{queue.length} parça</span>
+              <h2>Listeler</h2>
+              <span>{playlists.length} liste</span>
             </div>
 
             {isHost ? (
-              <form className="queue-form" onSubmit={submitQueue}>
-                <label htmlFor="queue-links">YouTube Music linkleri yapıştır</label>
+              <form className="queue-form" onSubmit={submitPlaylist}>
+                <label htmlFor="playlist-name">Liste adı</label>
+                <input
+                  id="playlist-name"
+                  value={playlistName}
+                  placeholder="liste1"
+                  onChange={(event) => setPlaylistName(event.target.value)}
+                />
+                <label htmlFor="queue-links">Liste linkleri</label>
                 <textarea
                   id="queue-links"
                   value={queueDraft}
@@ -364,13 +487,60 @@ export function Room({
                   placeholder={"https://music.youtube.com/watch?v=...\nhttps://music.youtube.com/watch?v=..."}
                   onChange={(event) => setQueueDraft(event.target.value)}
                 />
-                <button type="submit">Sıraya ekle</button>
-                {queueError ? <p className="error-message" role="alert">{queueError}</p> : null}
+                <div className="queue-form-actions">
+                  <button type="submit" disabled={playlistBusy}>Listeyi kaydet</button>
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    disabled={playlistBusy || extractMusicUrls(queueDraft).length === 0}
+                    onClick={() => onReplaceQueueTracks(extractMusicUrls(queueDraft))}
+                  >
+                    Odaya yükle
+                  </button>
+                </div>
+                {playlistError ? <p className="error-message" role="alert">{playlistError}</p> : null}
               </form>
             ) : (
-              <p className="queue-note">Sırayı host düzenler; şarkılar bitince liste başa döner.</p>
+              <p className="queue-note">Host bir liste sectiginde oda sirasina otomatik yuklenir.</p>
             )}
 
+            <div className="saved-tracks-block">
+              <div className="saved-tracks-title">
+                <h3>Kayitli Listeler</h3>
+                <button type="button" className="ghost-button" onClick={() => void refreshPlaylists()}>
+                  Yenile
+                </button>
+              </div>
+              <ul className="saved-tracks-list playlist-list">
+                {playlists.length > 0 ? (
+                  playlists.map((playlist) => (
+                    <li className={playlist.id === selectedPlaylistId ? "selected" : ""} key={playlist.id}>
+                      <div>
+                        <strong>{playlist.name}</strong>
+                        <small>{playlist.tracks.length} sarki</small>
+                      </div>
+                      <div className="saved-track-actions">
+                        <button type="button" className="ghost-button" onClick={() => applyPlaylist(playlist)}>
+                          Sec
+                        </button>
+                        <button
+                          type="button"
+                          className="ghost-button danger"
+                          disabled={playlistBusy}
+                          onClick={() => void removePlaylist(playlist.id)}
+                        >
+                          Sil
+                        </button>
+                      </div>
+                    </li>
+                  ))
+                ) : (
+                  <li className="saved-empty">{playlistBusy ? "Yukleniyor..." : "Kayitli liste yok."}</li>
+                )}
+              </ul>
+            </div>
+
+            <div className="queue-note room-queue-label">Odadaki sıra</div>
             <ol className="queue-list">
               {queue.length > 0 ? (
                 queue.map((track, index) => (
@@ -407,4 +577,23 @@ function timelinePercent(value: number, duration: number): number {
 function extractMusicUrls(value: string): string[] {
   const matches = value.match(/https:\/\/music\.youtube\.com\/watch\?[^\s,]+/g) ?? [];
   return [...new Set(matches.map((entry) => entry.trim()).filter(Boolean))];
+}
+
+function queueNeighbors(queue: RoomSnapshot["queue"], activeQueueItemId: string | null) {
+  if (queue.length === 0) {
+    return { previousTrack: null, nextTrack: null };
+  }
+
+  const currentIndex = queue.findIndex((track) => track.id === activeQueueItemId);
+  if (currentIndex === -1) {
+    return {
+      previousTrack: queue.length > 1 ? queue[queue.length - 1] : null,
+      nextTrack: queue[0] ?? null,
+    };
+  }
+
+  return {
+    previousTrack: queue[(currentIndex - 1 + queue.length) % queue.length] ?? null,
+    nextTrack: queue[(currentIndex + 1) % queue.length] ?? null,
+  };
 }

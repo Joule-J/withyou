@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { RoomStore, StoreError } from "../src/room-store.js";
 
-function createStore(options: { capacity?: number; now?: () => number; codes?: string[] } = {}) {
+function createStore(
+  options: {
+    capacity?: number;
+    now?: () => number;
+    codes?: string[];
+    resolveTrackTitle?: (videoId: string) => Promise<string | null>;
+  } = {},
+) {
   const codes = options.codes ?? ["ABC123"];
   let index = 0;
   return new RoomStore({
@@ -9,6 +16,7 @@ function createStore(options: { capacity?: number; now?: () => number; codes?: s
     roomCodeLength: 6,
     now: options.now,
     codeGenerator: () => codes[Math.min(index++, codes.length - 1)],
+    resolveTrackTitle: options.resolveTrackTitle,
   });
 }
 
@@ -35,7 +43,7 @@ describe("RoomStore", () => {
     expect(() => store.joinRoom(room.code, "Guest", "socket-2")).toThrowError(StoreError);
   });
 
-  it("allows only the host to change playback and increments revisions", () => {
+  it("allows only the host to change playback and increments revisions", async () => {
     let now = 1_000;
     const store = createStore({ now: () => now });
     const { room, participant: host } = store.createRoom("Host", "socket-1");
@@ -48,21 +56,21 @@ describe("RoomStore", () => {
       clientCommandId: "command-1",
     };
 
-    expect(() => store.applyPlayerCommand(room.code, guest.id, command)).toThrowError("host");
-    expect(store.applyPlayerCommand(room.code, host.id, command)).toMatchObject({
+    await expect(store.applyPlayerCommand(room.code, guest.id, command)).rejects.toThrowError("host");
+    await expect(store.applyPlayerCommand(room.code, host.id, command)).resolves.toMatchObject({
       revision: 1,
       isPlaying: true,
       updatedAtServerMs: 1_000,
     });
 
     now = 2_000;
-    expect(
+    await expect(
       store.applyPlayerCommand(room.code, host.id, {
         ...command,
         type: "pause",
         clientCommandId: "command-2",
       }),
-    ).toMatchObject({ revision: 2, isPlaying: false, updatedAtServerMs: 2_000 });
+    ).resolves.toMatchObject({ revision: 2, isPlaying: false, updatedAtServerMs: 2_000 });
   });
 
   it("reconnects with the matching token", () => {
@@ -93,10 +101,30 @@ describe("RoomStore", () => {
     expect(store.rooms.has(room.code)).toBe(false);
   });
 
-  it("adds queue tracks and loops through them", () => {
+  it("stores resolved track titles for playback and queue", async () => {
+    const store = createStore({
+      resolveTrackTitle: async (videoId) => `Title ${videoId}`,
+    });
+    const { room, participant: host } = store.createRoom("Host", "socket-1");
+
+    await store.applyPlayerCommand(room.code, host.id, {
+      type: "change_track",
+      videoId: "dQw4w9WgXcQ",
+      musicUrl: "https://music.youtube.com/watch?v=dQw4w9WgXcQ",
+      positionSeconds: 0,
+      clientCommandId: "command-1",
+      isPlaying: true,
+    });
+    await store.addQueueTracks(room.code, host.id, ["https://music.youtube.com/watch?v=y8MArfXrn80"]);
+
+    expect(room.playback?.title).toBe("Title dQw4w9WgXcQ");
+    expect(store.snapshot(room).queue[0]?.title).toBe("Title y8MArfXrn80");
+  });
+
+  it("adds queue tracks and loops through them", async () => {
     const store = createStore();
     const { room, participant: host } = store.createRoom("Host", "socket-1");
-    store.addQueueTracks(room.code, host.id, [
+    await store.addQueueTracks(room.code, host.id, [
       "https://music.youtube.com/watch?v=dQw4w9WgXcQ",
       "https://music.youtube.com/watch?v=y8MArfXrn80",
     ]);
@@ -106,5 +134,6 @@ describe("RoomStore", () => {
     expect(store.advanceQueue(room.code, host.id)?.videoId).toBe("dQw4w9WgXcQ");
     expect(store.advanceQueue(room.code, host.id)?.videoId).toBe("y8MArfXrn80");
     expect(store.advanceQueue(room.code, host.id)?.videoId).toBe("dQw4w9WgXcQ");
+    expect(store.previousQueue(room.code, host.id)?.videoId).toBe("y8MArfXrn80");
   });
 });

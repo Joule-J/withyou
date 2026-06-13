@@ -12,6 +12,11 @@
     "start": "npm run start --workspace server",
     "test": "npm test --workspace server && npm test --workspace web",
     "typecheck": "npm run typecheck --workspace server && npm run typecheck --workspace web",
-    "audit:prod": "npm audit --omit=dev"
+    "audit:prod": "npm audit --omit=dev",
+    "prisma:generate": "prisma generate",
+    "postinstall": "prisma generate"
+  },
+  "devDependencies": {
+    "prisma": "^6.16.0"
   }
 }

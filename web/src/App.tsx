@@ -16,8 +16,9 @@ export default function App() {
         error={room.error}
         serverNow={room.serverNow}
         onCommand={room.sendPlayerCommand}
-        onAddQueueTracks={room.addQueueTracks}
+        onReplaceQueueTracks={room.replaceQueueTracks}
         onAdvanceQueue={room.advanceQueue}
+        onPreviousQueue={room.previousQueue}
         onLeave={room.leaveRoom}
       />
     );
