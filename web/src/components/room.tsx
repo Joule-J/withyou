@@ -279,17 +279,30 @@ export function Room({
               </div>
 
               <div className="seek-control">
-                <input
-                  id="seek-range"
-                  aria-label="Oynatma zamanı"
-                  type="range"
-                  min="0"
-                  max={Math.max(duration, 1)}
-                  step="1"
-                  value={Math.min(seekValue, Math.max(duration, 1))}
-                  disabled={!playback}
-                  onChange={(event) => setSeekValue(Number(event.target.value))}
-                />
+                <div className="timeline-shell">
+                  <div className="timeline-readout">
+                    <span>{formatTime(seekValue)}</span>
+                    <span>{formatTime(duration)}</span>
+                  </div>
+                  <div className="timeline-track">
+                    <span className="timeline-fill" style={{ width: `${timelinePercent(seekValue, duration)}%` }} />
+                    <span className="timeline-cursor" style={{ left: `${timelinePercent(seekValue, duration)}%` }} />
+                    <div className="timeline-ticks" aria-hidden="true">
+                      {Array.from({ length: 9 }).map((_, index) => <i key={index} />)}
+                    </div>
+                    <input
+                      id="seek-range"
+                      aria-label="Oynatma zamanı"
+                      type="range"
+                      min="0"
+                      max={Math.max(duration, 1)}
+                      step="1"
+                      value={Math.min(seekValue, Math.max(duration, 1))}
+                      disabled={!playback}
+                      onChange={(event) => setSeekValue(Number(event.target.value))}
+                    />
+                  </div>
+                </div>
                 <button disabled={!playback} onClick={() => command("seek", seekValue)}>
                   Bu zamana git
                 </button>
@@ -368,4 +381,9 @@ function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds)) return "0:00";
   const whole = Math.max(0, Math.floor(seconds));
   return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
+}
+
+function timelinePercent(value: number, duration: number): number {
+  if (!Number.isFinite(value) || !Number.isFinite(duration) || duration <= 0) return 0;
+  return Math.min(100, Math.max(0, (value / duration) * 100));
 }
