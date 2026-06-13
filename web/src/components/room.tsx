@@ -312,19 +312,6 @@ export function Room({
             </div>
           )}
 
-          <div className="track-meta">
-            <div className="track-meta-copy">
-              <span>Şimdi çalıyor</span>
-              <strong>{playback?.title || playback?.videoId || "Host henüz bir şarkı seçmedi"}</strong>
-              <small>{playback ? "Odadaki herkes bu parçaya senkronize olur." : "Bir bağlantı ekleyince oynatıcı burada başlayacak."}</small>
-            </div>
-            {playback ? (
-              <div className="track-meta-actions">
-                <a href={playback.musicUrl} target="_blank" rel="noreferrer">YouTube Music</a>
-              </div>
-            ) : null}
-          </div>
-
           {needsUnlock ? (
             <button
               className="unlock-button"
@@ -344,11 +331,90 @@ export function Room({
 
           {isHost ? (
             <div className="host-controls">
-              <form className="track-form" onSubmit={submitTrack}>
-                <div className="form-heading">
-                  <label htmlFor="music-url">Yeni şarkı aç</label>
-                  <p>Linki yapıştır, ismi otomatik çekilsin.</p>
+              <div className="transport-card compact">
+                <div className="transport-controls">
+                  <button
+                    type="button"
+                    className="transport-icon"
+                    disabled={queue.length === 0}
+                    onClick={previousQueueTrack}
+                    aria-label="Önceki şarkı"
+                  >
+                    {"<<"}
+                  </button>
+                  <button
+                    type="button"
+                    className="transport-icon transport-primary"
+                    disabled={!playback}
+                    onClick={() => command(playback?.isPlaying ? "pause" : "play")}
+                    aria-label={playback?.isPlaying ? "Duraklat" : "Oynat"}
+                  >
+                    {playback?.isPlaying ? "||" : ">"}
+                  </button>
+                  <button
+                    type="button"
+                    className="transport-icon"
+                    disabled={queue.length === 0}
+                    onClick={skipQueueTrack}
+                    aria-label="Sonraki şarkı"
+                  >
+                    {">>"}
+                  </button>
                 </div>
+
+                <div className="seek-stack">
+                  <div className="queue-preview-card prev">
+                    <span>Önceki</span>
+                    <strong>{previousTrack?.title || previousTrack?.videoId || "Yok"}</strong>
+                  </div>
+
+                  <div className="seek-control">
+                    <div className="timeline-shell">
+                      <div className="timeline-readout">
+                        <span>{formatTime(seekValue)}</span>
+                        <span>{formatTime(duration)}</span>
+                      </div>
+                      <div className="timeline-track">
+                        <span className="timeline-fill" style={{ width: `${timelinePercent(seekValue, duration)}%` }} />
+                        <span className="timeline-cursor" style={{ left: `${timelinePercent(seekValue, duration)}%` }} />
+                        <div className="timeline-ticks" aria-hidden="true">
+                          {Array.from({ length: 9 }).map((_, index) => <i key={index} />)}
+                        </div>
+                        <input
+                          id="seek-range"
+                          aria-label="Oynatma zamanı"
+                          type="range"
+                          min="0"
+                          max={Math.max(duration, 1)}
+                          step="1"
+                          value={Math.min(seekValue, Math.max(duration, 1))}
+                          disabled={!playback}
+                          onChange={(event) => setSeekValue(Number(event.target.value))}
+                        />
+                      </div>
+                    </div>
+                    <button className="seek-commit" disabled={!playback} onClick={() => command("seek", seekValue)}>
+                      Bu zamana git
+                    </button>
+                  </div>
+
+                  <div className="queue-preview-card next">
+                    <span>Sonraki</span>
+                    <strong>{nextTrack?.title || nextTrack?.videoId || "Yok"}</strong>
+                  </div>
+                </div>
+              </div>
+
+              <div className="track-meta compact">
+                <strong>{playback?.title || playback?.videoId || "Host henüz bir şarkı seçmedi"}</strong>
+                {playback ? (
+                  <div className="track-meta-actions">
+                    <a href={playback.musicUrl} target="_blank" rel="noreferrer">YouTube Music</a>
+                  </div>
+                ) : null}
+              </div>
+
+              <form className="track-form compact" onSubmit={submitTrack}>
                 <div className="track-form-row">
                   <input
                     id="music-url"
@@ -361,85 +427,6 @@ export function Room({
                 </div>
                 {linkError ? <p className="error-message" role="alert">{linkError}</p> : null}
               </form>
-
-                <div className="transport-card">
-                  <div className="transport-card-head">
-                    <span>Oynatma Kontrolleri</span>
-                    <small>{playback ? "Host olarak çalmayı sen yönetiyorsun." : "Önce bir şarkı aç."}</small>
-                  </div>
-
-                  <div className="transport-controls">
-                    <button
-                      type="button"
-                      className="transport-icon"
-                      disabled={queue.length === 0}
-                      onClick={previousQueueTrack}
-                      aria-label="Önceki şarkı"
-                    >
-                      {"<<"}
-                    </button>
-                    <button
-                      type="button"
-                      className="transport-icon transport-primary"
-                      disabled={!playback}
-                      onClick={() => command(playback?.isPlaying ? "pause" : "play")}
-                      aria-label={playback?.isPlaying ? "Duraklat" : "Oynat"}
-                    >
-                      {playback?.isPlaying ? "||" : ">"}
-                    </button>
-                    <button
-                      type="button"
-                      className="transport-icon"
-                      disabled={queue.length === 0}
-                      onClick={skipQueueTrack}
-                      aria-label="Sonraki şarkı"
-                    >
-                      {">>"}
-                    </button>
-                  </div>
-
-                  <div className="seek-stack">
-                    <div className="queue-preview-card prev">
-                      <span>Önceki</span>
-                      <strong>{previousTrack?.title || previousTrack?.videoId || "Yok"}</strong>
-                    </div>
-
-                    <div className="seek-control">
-                      <div className="timeline-shell">
-                        <div className="timeline-readout">
-                          <span>{formatTime(seekValue)}</span>
-                          <span>{formatTime(duration)}</span>
-                        </div>
-                        <div className="timeline-track">
-                          <span className="timeline-fill" style={{ width: `${timelinePercent(seekValue, duration)}%` }} />
-                          <span className="timeline-cursor" style={{ left: `${timelinePercent(seekValue, duration)}%` }} />
-                          <div className="timeline-ticks" aria-hidden="true">
-                            {Array.from({ length: 9 }).map((_, index) => <i key={index} />)}
-                          </div>
-                          <input
-                            id="seek-range"
-                            aria-label="Oynatma zamanı"
-                            type="range"
-                            min="0"
-                            max={Math.max(duration, 1)}
-                            step="1"
-                            value={Math.min(seekValue, Math.max(duration, 1))}
-                            disabled={!playback}
-                            onChange={(event) => setSeekValue(Number(event.target.value))}
-                          />
-                        </div>
-                      </div>
-                      <button className="seek-commit" disabled={!playback} onClick={() => command("seek", seekValue)}>
-                        Bu zamana git
-                      </button>
-                    </div>
-
-                    <div className="queue-preview-card next">
-                      <span>Sonraki</span>
-                      <strong>{nextTrack?.title || nextTrack?.videoId || "Yok"}</strong>
-                    </div>
-                  </div>
-                </div>
             </div>
           ) : (
             <p className="guest-note">Müziği host kontrol ediyor. Senkronizasyon görünür fark oluştuğunda kendini toplar.</p>
