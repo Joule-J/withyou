@@ -51,6 +51,9 @@ export function Room({
   const appliedRevisionRef = useRef(0);
   const isHost = snapshot.hostParticipantId === participantId;
   const playback = snapshot.playback;
+  const participants = snapshot.participants ?? [];
+  const queue = snapshot.queue ?? [];
+  const activeQueueItemId = snapshot.activeQueueItemId ?? null;
 
   const applyPlayback = useCallback(
     (mode: "snapshot" | "drift" = "snapshot") => {
@@ -184,7 +187,7 @@ export function Room({
   }
 
   function handlePlayerEnded() {
-    if (!isHost || !playback || snapshot.queue.length === 0) return;
+    if (!isHost || !playback || queue.length === 0) return;
     if (advancedRevisionRef.current === playback.revision) return;
     advancedRevisionRef.current = playback.revision;
     onAdvanceQueue();
@@ -302,10 +305,10 @@ export function Room({
           <section className="participants-panel">
             <div className="panel-title">
               <h2>Odadakiler</h2>
-              <span>{snapshot.participants.length}/10</span>
+              <span>{participants.length}/10</span>
             </div>
             <ul>
-              {snapshot.participants.map((participant) => (
+              {participants.map((participant) => (
                 <li key={participant.id}>
                   <span className={`presence-dot ${participant.isConnected ? "online" : ""}`} />
                   <span>{participant.nickname}{participant.id === participantId ? " (sen)" : ""}</span>
@@ -318,7 +321,7 @@ export function Room({
           <section className="queue-panel">
             <div className="panel-title">
               <h2>Şarkı Sırası</h2>
-              <span>{snapshot.queue.length} parça</span>
+              <span>{queue.length} parça</span>
             </div>
 
             {isHost ? (
@@ -339,9 +342,9 @@ export function Room({
             )}
 
             <ol className="queue-list">
-              {snapshot.queue.length > 0 ? (
-                snapshot.queue.map((track, index) => (
-                  <li className={track.id === snapshot.activeQueueItemId ? "active" : ""} key={track.id}>
+              {queue.length > 0 ? (
+                queue.map((track, index) => (
+                  <li className={track.id === activeQueueItemId ? "active" : ""} key={track.id}>
                     <span>{index + 1}</span>
                     <div>
                       <strong>{track.title || track.videoId}</strong>

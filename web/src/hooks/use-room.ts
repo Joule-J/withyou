@@ -18,6 +18,7 @@ export function useRoom(initialRoomCode: string | null) {
   const [serverOffsetMs, setServerOffsetMs] = useState(0);
 
   const updateSnapshot = useCallback((incoming: RoomSnapshot) => {
+    incoming = normalizeSnapshot(incoming);
     const currentPlayback = snapshotRef.current?.playback;
     if (
       currentPlayback &&
@@ -145,5 +146,14 @@ export function useRoom(initialRoomCode: string | null) {
     addQueueTracks,
     advanceQueue,
     leaveRoom,
+  };
+}
+
+function normalizeSnapshot(snapshot: RoomSnapshot): RoomSnapshot {
+  return {
+    ...snapshot,
+    participants: snapshot.participants ?? [],
+    queue: snapshot.queue ?? [],
+    activeQueueItemId: snapshot.activeQueueItemId ?? null,
   };
 }

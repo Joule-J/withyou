@@ -51,6 +51,44 @@ describe("Socket.IO room flow", () => {
     });
   });
 
+  it("adds queue tracks and broadcasts playback", async () => {
+    const app = createApp({
+      port: 0,
+      roomCapacity: 10,
+      reconnectGraceMs: 20,
+      roomCodeLength: 6,
+      allowedOrigins: ["http://localhost:*"],
+      webDistDir: "../web/dist",
+    });
+    servers.push(app);
+    await new Promise<void>((resolve) => app.httpServer.listen(0, resolve));
+    const port = (app.httpServer.address() as AddressInfo).port;
+
+    const host = connect(port);
+    const guest = connect(port);
+    sockets.push(host, guest);
+    await Promise.all([waitFor(host, "connect"), waitFor(guest, "connect")]);
+
+    host.emit("room:create", { nickname: "Host" });
+    const hostJoined = await waitFor<{ snapshot: { roomCode: string } }>(host, "room:joined");
+
+    guest.emit("room:join", { roomCode: hostJoined.snapshot.roomCode, nickname: "Guest" });
+    await waitFor(guest, "room:joined");
+
+    const snapshotPromise = waitFor<{ queue: Array<{ videoId: string }> }>(guest, "room:snapshot");
+    const playbackPromise = waitFor<{ videoId: string }>(guest, "player:state");
+    host.emit("queue:add", {
+      musicUrls: [
+        "https://music.youtube.com/watch?v=dQw4w9WgXcQ",
+        "https://music.youtube.com/watch?v=y8MArfXrn80",
+      ],
+    });
+
+    await expect(snapshotPromise).resolves.toMatchObject({
+      queue: [{ videoId: "dQw4w9WgXcQ" }, { videoId: "y8MArfXrn80" }],
+    });
+    await expect(playbackPromise).resolves.toMatchObject({ videoId: "dQw4w9WgXcQ" });
+  });
 });
 
 function connect(port: number): Socket {
