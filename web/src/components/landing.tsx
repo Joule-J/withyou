@@ -31,7 +31,10 @@ export function Landing({ initialRoomCode, connected, error, onCreate, onJoin }:
     <main className="landing-shell">
       <section className="hero">
         <p className="eyebrow">WITHYOU</p>
-        <h1>WithYou</h1>
+        <div className="hero-logo-lockup">
+          <img src="/love.png" alt="" aria-hidden="true" />
+          <h1>WithYou</h1>
+        </div>
         <p className="hero-copy">
           Aynı parçayı aynı anda dinlemek için oda aç, YouTube Music bağlantısını ekle ve arkadaşlarınla senkron kal.
         </p>

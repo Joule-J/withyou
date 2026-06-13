@@ -199,6 +199,7 @@ export function Room({
         <div className="brand-lockup">
           <p className="eyebrow">WITHYOU</p>
           <div className="brand-row">
+            <img className="brand-logo" src="/love.png" alt="" aria-hidden="true" />
             <h1>WithYou</h1>
             <button className="room-code" onClick={copyInvite} title="Oda davet bağlantısını kopyala">
               {snapshot.roomCode}
