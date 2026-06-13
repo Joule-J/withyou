@@ -97,7 +97,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, Props>(function You
       currentTime: () => playerRef.current?.getCurrentTime() ?? 0,
       duration: () => playerRef.current?.getDuration() ?? 0,
       state: () => playerRef.current?.getPlayerState() ?? -1,
-      videoId: () => playerRef.current?.getVideoData().video_id ?? null,
+      videoId: () => playerRef.current?.getVideoData()?.video_id ?? null,
     }),
     [],
   );

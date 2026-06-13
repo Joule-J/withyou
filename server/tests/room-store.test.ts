@@ -96,13 +96,14 @@ describe("RoomStore", () => {
   it("adds queue tracks and loops through them", () => {
     const store = createStore();
     const { room, participant: host } = store.createRoom("Host", "socket-1");
-    const playback = store.addQueueTracks(room.code, host.id, [
+    store.addQueueTracks(room.code, host.id, [
       "https://music.youtube.com/watch?v=dQw4w9WgXcQ",
       "https://music.youtube.com/watch?v=y8MArfXrn80",
     ]);
 
-    expect(playback?.videoId).toBe("dQw4w9WgXcQ");
+    expect(room.playback).toBeNull();
     expect(store.snapshot(room).queue).toHaveLength(2);
+    expect(store.advanceQueue(room.code, host.id)?.videoId).toBe("dQw4w9WgXcQ");
     expect(store.advanceQueue(room.code, host.id)?.videoId).toBe("y8MArfXrn80");
     expect(store.advanceQueue(room.code, host.id)?.videoId).toBe("dQw4w9WgXcQ");
   });

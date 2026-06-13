@@ -144,7 +144,7 @@ export class RoomStore {
     return room.playback;
   }
 
-  addQueueTracks(code: string, participantId: string, musicUrls: string[]): PlaybackState | null {
+  addQueueTracks(code: string, participantId: string, musicUrls: string[]): void {
     const room = this.requireRoom(code);
     const participant = this.requireHost(room, participantId);
     const tracks = musicUrls.map((musicUrl): QueueTrack => {
@@ -161,8 +161,6 @@ export class RoomStore {
     });
 
     room.queue.push(...tracks);
-    if (!room.playback && tracks[0]) return this.playQueueTrack(room, tracks[0]);
-    return null;
   }
 
   advanceQueue(code: string, participantId: string): PlaybackState | null {

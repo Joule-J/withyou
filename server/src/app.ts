@@ -153,11 +153,10 @@ export function createApp(config: Config): AppInstance {
     socket.on("queue:add", (payload) => {
       handle(socket, queueAddSchema, payload, (data) => {
         const session = requireSession(socket);
-        const playback = store.addQueueTracks(session.roomCode, session.participantId, data.musicUrls);
+        store.addQueueTracks(session.roomCode, session.participantId, data.musicUrls);
         const room = store.rooms.get(session.roomCode);
         if (!room) throw new RequestError("ROOM_NOT_FOUND", "Oda bulunamadi.");
         io.to(session.roomCode).emit("room:snapshot", store.snapshot(room));
-        if (playback) io.to(session.roomCode).emit("player:state", playback);
       });
     });
 
