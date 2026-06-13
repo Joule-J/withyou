@@ -14,7 +14,11 @@ export type Playlist = {
 };
 
 export async function listPlaylists(): Promise<Playlist[]> {
-  const response = await fetch("/api/playlists");
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 900);
+  const response = await fetch("/api/playlists", { signal: controller.signal }).finally(() => {
+    window.clearTimeout(timeout);
+  });
   if (!response.ok) throw new Error("PLAYLISTS_FETCH_FAILED");
   const payload = (await response.json()) as { playlists: Playlist[] };
   return payload.playlists;

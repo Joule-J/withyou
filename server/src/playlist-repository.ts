@@ -61,30 +61,17 @@ export class InMemoryPlaylistRepository implements PlaylistRepository {
 }
 
 export class PrismaPlaylistRepository implements PlaylistRepository {
+  private cache: PlaylistRecord[] = [];
+
   constructor(private readonly prisma: PrismaClient) {}
 
   async list(): Promise<PlaylistRecord[]> {
-    const playlists = await this.prisma.playlist.findMany({
-      include: {
-        tracks: {
-          orderBy: { position: "asc" },
-        },
-      },
-      orderBy: { updatedAt: "desc" },
-    });
+    if (this.cache.length > 0) {
+      void this.refreshCache();
+      return this.cache;
+    }
 
-    return playlists.map((playlist) => ({
-      id: playlist.id,
-      name: playlist.name,
-      updatedAt: playlist.updatedAt.toISOString(),
-      tracks: playlist.tracks.map((track) => ({
-        id: track.id,
-        title: track.title,
-        videoId: track.videoId,
-        musicUrl: track.musicUrl,
-        position: track.position,
-      })),
-    }));
+    return this.refreshCache();
   }
 
   async save(input: PlaylistDraft): Promise<PlaylistRecord> {
@@ -119,7 +106,7 @@ export class PrismaPlaylistRepository implements PlaylistRepository {
       },
     });
 
-    return {
+    const record = {
       id: playlist.id,
       name: playlist.name,
       updatedAt: playlist.updatedAt.toISOString(),
@@ -131,10 +118,42 @@ export class PrismaPlaylistRepository implements PlaylistRepository {
         position: track.position,
       })),
     };
+    this.cache = [record, ...this.cache.filter((item) => item.id !== record.id)];
+    return record;
   }
 
   async delete(playlistId: string): Promise<void> {
     await this.prisma.playlist.delete({ where: { id: playlistId } });
+    this.cache = this.cache.filter((playlist) => playlist.id !== playlistId);
+  }
+
+  private async refreshCache(): Promise<PlaylistRecord[]> {
+    const mappedPromise = this.prisma.playlist
+      .findMany({
+        include: {
+          tracks: {
+            orderBy: { position: "asc" },
+          },
+        },
+        orderBy: { updatedAt: "desc" },
+      })
+      .then((playlists) =>
+        playlists.map((playlist) => ({
+          id: playlist.id,
+          name: playlist.name,
+          updatedAt: playlist.updatedAt.toISOString(),
+          tracks: playlist.tracks.map((track) => ({
+            id: track.id,
+            title: track.title,
+            videoId: track.videoId,
+            musicUrl: track.musicUrl,
+            position: track.position,
+          })),
+        })),
+      );
+
+    this.cache = await withTimeout(mappedPromise, 800, this.cache);
+    return this.cache;
   }
 }
 
@@ -147,4 +166,18 @@ export function createPlaylistRepository(env: NodeJS.ProcessEnv = process.env): 
 
   prismaClient ??= new PrismaClient();
   return new PrismaPlaylistRepository(prismaClient);
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> {
+  let timeoutId: NodeJS.Timeout | null = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((resolve) => {
+        timeoutId = setTimeout(() => resolve(fallback), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
 }

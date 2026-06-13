@@ -131,8 +131,9 @@ export function Room({
   );
 
   useEffect(() => {
+    if (!isHost) return;
     void refreshPlaylists();
-  }, [refreshPlaylists]);
+  }, [isHost, refreshPlaylists]);
 
   useEffect(() => {
     applyPlayback("snapshot");
