@@ -168,10 +168,7 @@ export function Room({
 
   function submitQueue(event: FormEvent) {
     event.preventDefault();
-    const urls = queueDraft
-      .split(/\s+/)
-      .map((entry) => entry.trim())
-      .filter(Boolean);
+    const urls = extractMusicUrls(queueDraft);
     if (urls.length === 0) {
       setQueueError("En az bir YouTube Music bağlantısı yapıştır.");
       return;
@@ -194,6 +191,11 @@ export function Room({
     if (!isHost || !playback || queue.length === 0) return;
     if (advancedRevisionRef.current === playback.revision) return;
     advancedRevisionRef.current = playback.revision;
+    onAdvanceQueue();
+  }
+
+  function skipQueueTrack() {
+    if (!isHost || queue.length === 0) return;
     onAdvanceQueue();
   }
 
@@ -285,8 +287,11 @@ export function Room({
               </form>
 
               <div className="transport-controls">
-                <button disabled={!playback} onClick={() => command("play")}>Oynat</button>
-                <button disabled={!playback} onClick={() => command("pause")}>Duraklat</button>
+                <button type="button" disabled={!playback} onClick={() => command("play")}>Oynat</button>
+                <button type="button" disabled={!playback} onClick={() => command("pause")}>Duraklat</button>
+                <button type="button" disabled={queue.length === 0} onClick={skipQueueTrack}>
+                  Sonrakini geç
+                </button>
               </div>
 
               <div className="seek-control">
@@ -351,7 +356,7 @@ export function Room({
 
             {isHost ? (
               <form className="queue-form" onSubmit={submitQueue}>
-                <label htmlFor="queue-links">YouTube Music linkleri</label>
+                <label htmlFor="queue-links">YouTube Music linkleri yapıştır</label>
                 <textarea
                   id="queue-links"
                   value={queueDraft}
@@ -397,4 +402,9 @@ function formatTime(seconds: number): string {
 function timelinePercent(value: number, duration: number): number {
   if (!Number.isFinite(value) || !Number.isFinite(duration) || duration <= 0) return 0;
   return Math.min(100, Math.max(0, (value / duration) * 100));
+}
+
+function extractMusicUrls(value: string): string[] {
+  const matches = value.match(/https:\/\/music\.youtube\.com\/watch\?[^\s,]+/g) ?? [];
+  return [...new Set(matches.map((entry) => entry.trim()).filter(Boolean))];
 }
