@@ -110,6 +110,10 @@ export function Room({
   }, [applyPlayback]);
 
   useEffect(() => {
+    if (!playback) setPlayerReady(false);
+  }, [playback]);
+
+  useEffect(() => {
     const interval = window.setInterval(() => {
       const player = playerRef.current;
       if (!player) return;
@@ -222,12 +226,19 @@ export function Room({
             {playback ? <span>{formatTime(position)} / {formatTime(duration)}</span> : null}
           </div>
 
-          <YouTubePlayer
-            ref={playerRef}
-            onReady={() => setPlayerReady(true)}
-            onError={setPlayerError}
-            onEnded={handlePlayerEnded}
-          />
+          {playback ? (
+            <YouTubePlayer
+              ref={playerRef}
+              onReady={() => setPlayerReady(true)}
+              onError={setPlayerError}
+              onEnded={handlePlayerEnded}
+            />
+          ) : (
+            <div className="player-frame empty-player">
+              <img src="/love.png" alt="" aria-hidden="true" />
+              <span>Şarkı bekleniyor</span>
+            </div>
+          )}
 
           <div className="track-meta">
             <div>
