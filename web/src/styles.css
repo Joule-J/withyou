@@ -30,6 +30,7 @@ body,
 }
 
 body {
+  position: relative;
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
@@ -40,6 +41,39 @@ body {
     linear-gradient(235deg, rgba(207, 236, 243, 0.1), transparent 30rem),
     linear-gradient(180deg, #0b0d0d 0%, #121717 100%);
   overflow: hidden;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: -12rem;
+  z-index: -2;
+  pointer-events: none;
+  opacity: 0.22;
+  background-image:
+    url("/flowers/tulip-single.png"),
+    url("/flowers/mexican-aster.png"),
+    url("/flowers/cherry-blossom.png"),
+    url("/flowers/flower-cluster.png"),
+    url("/flowers/tulips.png"),
+    url("/flowers/sakura.png"),
+    url("/flowers/flower-pink.png");
+  background-size: 4.4rem 4.4rem, 5rem 5rem, 4.8rem 4.8rem, 4.3rem 4.3rem, 5.2rem 5.2rem, 4.7rem 4.7rem, 4.5rem 4.5rem;
+  background-position: 0 0, 8rem 4rem, 16rem 8rem, 24rem 12rem, 32rem 16rem, 40rem 20rem, 48rem 24rem;
+  background-repeat: repeat;
+  transform: rotate(-18deg);
+  filter: saturate(0.88);
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 50% 10%, rgba(16, 19, 19, 0.42), transparent 34rem),
+    linear-gradient(180deg, rgba(11, 13, 13, 0.58), rgba(18, 23, 23, 0.86));
 }
 
 button, input, textarea { font: inherit; }
@@ -115,6 +149,8 @@ label {
 }
 
 .landing-shell {
+  position: relative;
+  z-index: 1;
   min-height: 100vh;
   min-height: 100dvh;
   display: grid;
@@ -225,6 +261,8 @@ label {
 }
 
 .room-shell {
+  position: relative;
+  z-index: 1;
   width: min(1360px, calc(100% - 1.5rem));
   margin: 0 auto;
   min-height: 100vh;
