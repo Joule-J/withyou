@@ -46,6 +46,12 @@ export function MobileRoom({
   const isHost = snapshot.hostParticipantId === participantId;
   const playerRef = useRef<YouTubePlayerHandle>(null);
   const settleUntilRef = useRef(0);
+  const mediaSessionActionsRef = useRef<{
+    play: () => void;
+    pause: () => void;
+    nexttrack: () => void;
+    previoustrack: () => void;
+  } | null>(null);
 
   useEffect(() => {
     if (!showPlaylists) return;
@@ -161,6 +167,73 @@ export function MobileRoom({
     setSoundUnlocked(true);
     playerRef.current?.unmute();
   }, [isHost]);
+
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !("mediaSession" in navigator) || !playback) return;
+
+    const mediaSession = navigator.mediaSession;
+    mediaSession.metadata = new MediaMetadata({
+      title: playback.title ?? "WithYou",
+      artist: "WithYou",
+      album: snapshot.roomCode,
+      artwork: playback.thumbnailUrl
+        ? [{ src: playback.thumbnailUrl, sizes: "512x512", type: "image/jpeg" }]
+        : undefined,
+    });
+
+    mediaSession.playbackState = playback.isPlaying ? "playing" : "paused";
+
+    mediaSessionActionsRef.current = {
+      play: () => {
+        if (!isHost) return;
+        unlockSound();
+        playerRef.current?.play();
+        onCommand({
+          type: "play",
+          videoId: playback.videoId,
+          musicUrl: playback.musicUrl,
+          title: playback.title,
+          positionSeconds: playback.positionSeconds ?? 0,
+          clientCommandId: crypto.randomUUID(),
+        });
+      },
+      pause: () => {
+        if (!isHost) return;
+        playerRef.current?.pause();
+        onCommand({
+          type: "pause",
+          videoId: playback.videoId,
+          musicUrl: playback.musicUrl,
+          title: playback.title,
+          positionSeconds: playback.positionSeconds ?? 0,
+          clientCommandId: crypto.randomUUID(),
+        });
+      },
+      nexttrack: () => {
+        if (!isHost) return;
+        unlockSound();
+        onAdvanceQueue();
+      },
+      previoustrack: () => {
+        if (!isHost) return;
+        unlockSound();
+        onPreviousQueue();
+      },
+    };
+
+    const handlers = mediaSessionActionsRef.current;
+    mediaSession.setActionHandler("play", handlers.play);
+    mediaSession.setActionHandler("pause", handlers.pause);
+    mediaSession.setActionHandler("nexttrack", handlers.nexttrack);
+    mediaSession.setActionHandler("previoustrack", handlers.previoustrack);
+
+    return () => {
+      mediaSession.setActionHandler("play", null);
+      mediaSession.setActionHandler("pause", null);
+      mediaSession.setActionHandler("nexttrack", null);
+      mediaSession.setActionHandler("previoustrack", null);
+    };
+  }, [isHost, onAdvanceQueue, onCommand, onPreviousQueue, playback, snapshot.roomCode, unlockSound]);
 
   return (
     <div className="mobile-shell">
