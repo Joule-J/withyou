@@ -201,8 +201,24 @@ export function Room({
     });
   }
 
+  function applyHostAction(type: PlayerCommand["type"], nextPosition = position) {
+    const player = playerRef.current;
+    if (!isHost || !playback || !player) return;
+
+    const target = Math.max(0, nextPosition);
+    if (type === "pause") {
+      player.pause();
+    } else if (type === "play") {
+      player.seek(target);
+      player.play();
+    } else if (type === "seek") {
+      player.seek(target);
+    }
+  }
+
   function commitSeek(nextPosition: number) {
     if (!playback) return;
+    applyHostAction("seek", nextPosition);
     command("seek", nextPosition);
   }
 
@@ -384,6 +400,7 @@ export function Room({
               onClick={() => {
                 const player = playerRef.current;
                 if (player && playback) {
+                  player.unmute();
                   player.seek(targetPosition(playback, serverNow()));
                   player.play();
                   settleUntilRef.current = Date.now() + POST_ACTION_SETTLE_MS;
@@ -451,7 +468,11 @@ export function Room({
                     type="button"
                     className="transport-icon transport-primary"
                     disabled={!isHost || !playback}
-                    onClick={() => command(playback?.isPlaying ? "pause" : "play")}
+                    onClick={() => {
+                      if (!playback) return;
+                      applyHostAction(playback.isPlaying ? "pause" : "play");
+                      command(playback.isPlaying ? "pause" : "play");
+                    }}
                     aria-label={playback?.isPlaying ? "Duraklat" : "Oynat"}
                   >
                     <TransportGlyph kind={playback?.isPlaying ? "pause" : "play"} />
