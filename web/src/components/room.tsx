@@ -500,6 +500,45 @@ export function Room({
             </ul>
           </section>
 
+          {showPlaylistOverlay ? (
+            <section className="playlist-inline-panel sidebar-card">
+              <div className="sidebar-section-title">
+                <div className="sidebar-title-copy">
+                  <h3>Tüm listeler</h3>
+                </div>
+                <button type="button" className="icon-menu-button" onClick={() => setShowPlaylistOverlay(false)} aria-label="Kapat">
+                  <CloseGlyph />
+                </button>
+              </div>
+              <ul className="playlist-inline-list">
+                {playlists.map((playlist, index) => (
+                  <li key={playlist.id} className="playlist-box">
+                    <Artwork
+                      className={`playlist-cover cover-${index % 4}`}
+                      src={playlist.tracks[0]?.thumbnailUrl}
+                      fallback={playlist.name}
+                    />
+                    <div className="playlist-box-info">
+                      <strong>{playlist.name}</strong>
+                      <small>{playlist.tracks.length} şarkı</small>
+                    </div>
+                    <button
+                      type="button"
+                      className="icon-menu-button"
+                      onClick={() => {
+                        applyPlaylist(playlist);
+                        setShowPlaylistOverlay(false);
+                      }}
+                      aria-label={`${playlist.name} listesini oynat`}
+                    >
+                      <PlayMiniGlyph />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+
           <section className="playlists-panel sidebar-card">
             <div className="sidebar-section-title">
               <div className="sidebar-title-copy">
@@ -729,48 +768,7 @@ export function Room({
         </aside>
       </div>
 
-      {showPlaylistOverlay ? (
-        <div className="playlist-overlay" role="dialog" aria-modal="true">
-          <div className="playlist-overlay-backdrop" onClick={() => setShowPlaylistOverlay(false)} />
-          <section className="playlist-overlay-panel">
-            <div className="playlist-overlay-header">
-              <h2>Tüm listeler</h2>
-              <button type="button" className="icon-menu-button" onClick={() => setShowPlaylistOverlay(false)} aria-label="Kapat">
-                <CloseGlyph />
-              </button>
-            </div>
-            <ul className="playlist-overlay-list">
-              {playlists.map((playlist, index) => (
-                <li key={playlist.id}>
-                  <Artwork
-                    className={`playlist-cover cover-${index % 4}`}
-                    src={playlist.tracks[0]?.thumbnailUrl}
-                    fallback={playlist.name}
-                  />
-                  <div className="playlist-item-copy">
-                    <div className="playlist-item-topline">
-                      <strong>{playlist.name}</strong>
-                      <small className="playlist-count-badge">{playlist.tracks.length}</small>
-                    </div>
-                    <small>Son güncelleme: {formatRelativeDate(playlist.updatedAt)}</small>
-                  </div>
-                  <button
-                    type="button"
-                    className="icon-menu-button"
-                    onClick={() => {
-                      applyPlaylist(playlist);
-                      setShowPlaylistOverlay(false);
-                    }}
-                    aria-label={`${playlist.name} listesini oynat`}
-                  >
-                    <PlayMiniGlyph />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </section>
-        </div>
-      ) : null}
+      {null}
     </main>
   );
 }
