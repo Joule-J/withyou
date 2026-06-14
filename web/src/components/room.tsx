@@ -77,6 +77,7 @@ export function Room({
   const activeQueueItemId = snapshot.activeQueueItemId ?? null;
   const { previousTrack, nextTrack } = queueNeighbors(queue, activeQueueItemId);
   const currentTrackLabel = playback?.title || playback?.videoId || "Host henüz bir şarkı seçmedi";
+  const queueListRef = useRef<HTMLUListElement | null>(null);
 
   const refreshPlaylists = useCallback(async () => {
     setPlaylistBusy(true);
@@ -641,7 +642,7 @@ export function Room({
                 Yenile
               </button>
             </div>
-            <ol className="queue-list rich-queue-list">
+            <ol className="queue-list rich-queue-list" ref={queueListRef as any}>
               {queue.length > 0 ? (
                 queue.map((track, index) => (
                   <li
@@ -706,6 +707,16 @@ export function Room({
             </ol>
           </section>
 
+
+  // When the queue length changes, scroll the queue list to show newest items
+  useEffect(() => {
+    if (!queueListRef.current) return;
+    try {
+      queueListRef.current.scrollTo({ top: queueListRef.current.scrollHeight, behavior: "smooth" });
+    } catch {
+      queueListRef.current.scrollTop = queueListRef.current.scrollHeight;
+    }
+  }, [queue.length]);
           <form className="sidebar-link-bar sidebar-card" onSubmit={submitQueueLink}>
             <LinkGlyph />
             <input
