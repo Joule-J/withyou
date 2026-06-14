@@ -39,6 +39,30 @@ export function createApp(config: Config): AppInstance {
   app.use(cors());
   app.use(express.json());
   const playlistService = new PlaylistService(createPlaylistRepository());
+  // Log persistence mode on startup to help diagnose deployment issues where
+  // the server may accidentally use the in-memory repository (causing lists
+  // to disappear after deploy).
+  try {
+    const mode = playlistPersistenceMode();
+    // eslint-disable-next-line no-console
+    console.log("Playlist persistence mode:", mode);
+    if (mode === "supabase-postgres") {
+      // Warm the playlist cache and verify DB connectivity.
+      playlistService
+        .listPlaylists()
+        .then((lists) => {
+          // eslint-disable-next-line no-console
+          console.log(`Loaded ${lists.length} playlists from DB`);
+        })
+        .catch((err) => {
+          // eslint-disable-next-line no-console
+          console.error("Error loading playlists from DB:", err?.message ?? err);
+        });
+    }
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error("Unable to determine playlist persistence mode:", err?.message ?? err);
+  }
   app.get("/health", (_request, response) => {
     response.json({
       ok: true,
@@ -200,7 +224,7 @@ export function createApp(config: Config): AppInstance {
     socket.on("queue:add", (payload) => {
       void handle(socket, queueAddSchema, payload, async (data) => {
         const session = requireSession(socket);
-        await store.addQueueTracks(session.roomCode, session.participantId, data.musicUrls);
+        await store.addQueueTracks(session.roomCode, session.participantId, data.musicUrls, data.insertAfterId);
         const room = store.rooms.get(session.roomCode);
         if (!room) throw new RequestError("ROOM_NOT_FOUND", "Oda bulunamadi.");
         io.to(session.roomCode).emit("room:snapshot", store.snapshot(room));
