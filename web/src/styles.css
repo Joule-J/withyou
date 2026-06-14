@@ -1718,6 +1718,7 @@ label {
   box-shadow: 0 4px 12px rgba(230, 190, 205, 0.08);
   position: relative;
   overflow: hidden;
+  align-items: center;
 }
 
 .pl-item::before {
@@ -1770,6 +1771,7 @@ label {
   flex-direction: column;
   justify-content: center;
   min-width: 0;
+  line-height: 1.2;
 }
 
 .pl-info strong {
@@ -1790,6 +1792,8 @@ label {
   display: flex;
   align-items: center;
   gap: 0.3rem;
+  min-width: 3.5rem;
+  justify-self: end;
 }
 
 .pl-confirm {
