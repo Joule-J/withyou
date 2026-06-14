@@ -26,14 +26,24 @@ export async function listPlaylists(): Promise<Playlist[]> {
 }
 
 export async function savePlaylist(name: string, musicUrls: string[]): Promise<Playlist> {
-  const response = await fetch("/api/playlists", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, musicUrls }),
-  });
-  if (!response.ok) throw new Error("PLAYLIST_SAVE_FAILED");
-  const payload = (await response.json()) as { playlist: Playlist };
-  return payload.playlist;
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 3_000);
+  try {
+    const response = await fetch("/api/playlists", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, musicUrls }),
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new Error("PLAYLIST_SAVE_FAILED");
+    const payload = (await response.json()) as { playlist: Playlist };
+    return payload.playlist;
+  } catch (error: unknown) {
+    if ((error as Error)?.name === "AbortError") throw new Error("PLAYLIST_SAVE_TIMEOUT");
+    throw new Error(((error as Error)?.message ?? "PLAYLIST_SAVE_FAILED") as string);
+  } finally {
+    window.clearTimeout(timeout);
+  }
 }
 
 export async function deletePlaylist(playlistId: string): Promise<void> {
