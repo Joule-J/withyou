@@ -72,6 +72,12 @@
     min-width: 3.2rem;
   }
 
+  .mobile-sound-unlock {
+    width: 100%;
+    background: rgba(255, 199, 226, 0.58);
+    font-weight: 800;
+  }
+
   .mobile-actions {
     display: grid;
     grid-template-columns: 1fr 1fr;

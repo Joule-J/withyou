@@ -41,6 +41,7 @@ export function MobileRoom({
   const [playlistsLoading, setPlaylistsLoading] = useState(false);
   const [playlistsError, setPlaylistsError] = useState<string | null>(null);
   const [showPlaylistOverlay, setShowPlaylistOverlay] = useState(false);
+  const [soundUnlocked, setSoundUnlocked] = useState(false);
   const playback = snapshot.playback;
   const isHost = snapshot.hostParticipantId === participantId;
   const playerRef = useRef<YouTubePlayerHandle>(null);
@@ -105,7 +106,7 @@ export function MobileRoom({
     const currentPosition = player.currentTime();
 
     if (currentVideoId !== playback.videoId) {
-      if (playback.isPlaying) {
+      if (playback.isPlaying || !soundUnlocked) {
         player.mute();
       }
       player.load(playback.videoId, target, playback.isPlaying);
@@ -119,17 +120,22 @@ export function MobileRoom({
     }
 
     if (playback.isPlaying && playerState !== 1) {
-      player.mute();
+      if (!soundUnlocked) player.mute();
       player.play();
     }
 
     if (!playback.isPlaying && playerState !== 2) {
       player.pause();
     }
-  }, [playback, playerReady, serverNow]);
+    if (soundUnlocked) {
+      player.unmute();
+    }
+  }, [playback, playerReady, serverNow, soundUnlocked]);
 
   const playPause = useCallback(() => {
     if (!playback || !isHost) return;
+    setSoundUnlocked(true);
+    playerRef.current?.unmute();
     onCommand({
       type: playback.isPlaying ? "pause" : "play",
       videoId: playback.videoId,
@@ -142,13 +148,22 @@ export function MobileRoom({
 
   const skipNext = useCallback(() => {
     if (!isHost) return;
+    setSoundUnlocked(true);
+    playerRef.current?.unmute();
     onAdvanceQueue();
   }, [isHost, onAdvanceQueue]);
 
   const skipPrev = useCallback(() => {
     if (!isHost) return;
+    setSoundUnlocked(true);
+    playerRef.current?.unmute();
     onPreviousQueue();
   }, [isHost, onPreviousQueue]);
+
+  function unlockSound() {
+    setSoundUnlocked(true);
+    playerRef.current?.unmute();
+  }
 
   return (
     <div className="mobile-shell">
@@ -172,13 +187,18 @@ export function MobileRoom({
           ) : (
             <div className="mobile-empty">Şarkı bekleniyor</div>
           )}
-        <div className="mobile-now">
-          <div className="mobile-now-title">{playback?.title ?? "Henüz çalmıyor"}</div>
-          <div className="mobile-now-controls">
+          <div className="mobile-now">
+            <div className="mobile-now-title">{playback?.title ?? "Henüz çalmıyor"}</div>
+            <div className="mobile-now-controls">
               <button onClick={skipPrev} aria-label="Önceki" disabled={!isHost}>◀◀</button>
               <button onClick={playPause} aria-label="Oynat/Duraklat" disabled={!isHost}>{playback?.isPlaying ? "⏸" : "▶"}</button>
               <button onClick={skipNext} aria-label="Sonraki" disabled={!isHost}>▶▶</button>
             </div>
+            {playback && !soundUnlocked ? (
+              <button type="button" className="mobile-sound-unlock" onClick={unlockSound}>
+                Sesi aç
+              </button>
+            ) : null}
             {!isHost ? <div className="mobile-readonly">Client modunda kontrol kapalı.</div> : null}
           </div>
         </div>
