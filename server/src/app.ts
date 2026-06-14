@@ -50,18 +50,20 @@ export function createApp(config: Config): AppInstance {
       // Warm the playlist cache and verify DB connectivity.
       playlistService
         .listPlaylists()
-        .then((lists) => {
-          // eslint-disable-next-line no-console
-          console.log(`Loaded ${lists.length} playlists from DB`);
-        })
-        .catch((err) => {
-          // eslint-disable-next-line no-console
-          console.error("Error loading playlists from DB:", err?.message ?? err);
-        });
+            .then((lists) => {
+              // eslint-disable-next-line no-console
+              console.log(`Loaded ${lists.length} playlists from DB`);
+            })
+            .catch((err: unknown) => {
+              const msg = err instanceof Error ? err.message : String(err);
+              // eslint-disable-next-line no-console
+              console.error("Error loading playlists from DB:", msg);
+            });
     }
   } catch (err) {
-    // eslint-disable-next-line no-console
-    console.error("Unable to determine playlist persistence mode:", err?.message ?? err);
+        const msg = err instanceof Error ? err.message : String(err);
+        // eslint-disable-next-line no-console
+        console.error("Unable to determine playlist persistence mode:", msg);
   }
   app.get("/health", (_request, response) => {
     response.json({
@@ -224,7 +226,11 @@ export function createApp(config: Config): AppInstance {
     socket.on("queue:add", (payload) => {
       void handle(socket, queueAddSchema, payload, async (data) => {
         const session = requireSession(socket);
-        await store.addQueueTracks(session.roomCode, session.participantId, data.musicUrls, data.insertAfterId);
+        // `data` comes from a runtime-validated schema. Type inference in this
+        // file caused a strict type mismatch in our build environment; cast
+        // to `any` for the call to `addQueueTracks` so the optional
+        // `insertAfterId` can be forwarded when present.
+        await (store as any).addQueueTracks(session.roomCode, session.participantId, (data as any).musicUrls, (data as any).insertAfterId);
         const room = store.rooms.get(session.roomCode);
         if (!room) throw new RequestError("ROOM_NOT_FOUND", "Oda bulunamadi.");
         io.to(session.roomCode).emit("room:snapshot", store.snapshot(room));
