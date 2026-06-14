@@ -266,9 +266,12 @@ export function Room({
     setPlaylistName(playlist.name);
     setQueueDraft(playlist.tracks.map((track) => track.musicUrl).join("\n"));
     if (isHost) {
+      // If there is no current playback the server will autoplay the first
+      // track when replacing the queue. Only send an explicit play command
+      // when there is an active playback (to force a change).
+      const shouldLetServerAutoplay = !playback;
       onReplaceQueueTracks(playlist.tracks.map((track) => track.musicUrl));
-      // Ensure the host starts playing the first track immediately
-      if (playlist.tracks.length > 0) {
+      if (!shouldLetServerAutoplay && playlist.tracks.length > 0) {
         const first = playlist.tracks[0];
         onCommand({
           type: "change_track",
