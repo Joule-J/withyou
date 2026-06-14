@@ -46,6 +46,8 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, Props>(function You
   const onErrorRef = useRef(onError);
   const onEndedRef = useRef(onEnded);
   const [ready, setReady] = useState(false);
+  const [lastLoadedVideo, setLastLoadedVideo] = useState<string | null>(null);
+  const [playerFailed, setPlayerFailed] = useState(false);
 
   onReadyRef.current = onReady;
   onErrorRef.current = onError;
@@ -53,7 +55,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, Props>(function You
 
   useEffect(() => {
     let disposed = false;
-    void loadYouTubeApi().then(() => {
+      void loadYouTubeApi().then(() => {
       if (disposed || !containerRef.current || !window.YT) return;
       playerRef.current = new window.YT.Player(containerRef.current, {
         width: "100%",
@@ -70,7 +72,11 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, Props>(function You
             setReady(true);
             onReadyRef.current();
           },
-          onError: () => onErrorRef.current("Bu parca YouTube oynaticisinda acilamadi."),
+          onError: (ev: any) => {
+            // Report and mark failure so we can offer a fallback UI on mobile.
+            setPlayerFailed(true);
+            onErrorRef.current("Bu parca YouTube oynaticisinda acilamadi.");
+          },
           onStateChange: (event) => {
             if (event.data === 0) onEndedRef.current?.();
           },
@@ -88,6 +94,8 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, Props>(function You
     ref,
     () => ({
       load(videoId, startSeconds, autoplay) {
+        setPlayerFailed(false);
+        setLastLoadedVideo(videoId);
         if (autoplay) playerRef.current?.loadVideoById({ videoId, startSeconds });
         else playerRef.current?.cueVideoById({ videoId, startSeconds });
       },
@@ -104,8 +112,26 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, Props>(function You
 
   return (
     <div className="player-frame" aria-label="YouTube oynatici">
-      <div ref={containerRef} />
-      {!ready && <div className="player-loading">Oynatici yukleniyor...</div>}
+      <div ref={containerRef} style={{ display: playerFailed ? "none" : undefined }} />
+      {!ready && !playerFailed && <div className="player-loading">Oynatici yukleniyor...</div>}
+      {playerFailed && lastLoadedVideo ? (
+        <div className="player-fallback">
+          <div className="player-fallback-poster">
+            <img src={`https://i.ytimg.com/vi/${lastLoadedVideo}/hqdefault.jpg`} alt="" />
+            <button
+              type="button"
+              className="player-fallback-play"
+              onClick={() => {
+                // Open the embed in a new tab as a reliable fallback on mobile.
+                window.open(`https://www.youtube.com/watch?v=${lastLoadedVideo}`, "_blank");
+              }}
+            >
+              Oynat
+            </button>
+          </div>
+          <div className="player-fallback-note">Tarayıcı kısıtlaması nedeniyle oynatıcı açılamadı. YouTube'da açmak için butona dokunun.</div>
+        </div>
+      ) : null}
     </div>
   );
 });
