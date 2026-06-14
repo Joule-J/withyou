@@ -106,9 +106,6 @@ export function MobileRoom({
     const currentPosition = player.currentTime();
 
     if (currentVideoId !== playback.videoId) {
-      if (playback.isPlaying || !soundUnlocked) {
-        player.mute();
-      }
       player.load(playback.videoId, target, playback.isPlaying);
       settleUntilRef.current = now + POST_ACTION_SETTLE_MS;
       return;
@@ -120,22 +117,21 @@ export function MobileRoom({
     }
 
     if (playback.isPlaying && playerState !== 1) {
-      if (!soundUnlocked) player.mute();
       player.play();
     }
 
     if (!playback.isPlaying && playerState !== 2) {
       player.pause();
     }
-    if (soundUnlocked) {
-      player.unmute();
-    }
-  }, [playback, playerReady, serverNow, soundUnlocked]);
+  }, [playback, playerReady, serverNow]);
 
   const playPause = useCallback(() => {
     if (!playback || !isHost) return;
     setSoundUnlocked(true);
     playerRef.current?.unmute();
+    if (!playback.isPlaying) {
+      playerRef.current?.play();
+    }
     onCommand({
       type: playback.isPlaying ? "pause" : "play",
       videoId: playback.videoId,
@@ -160,10 +156,11 @@ export function MobileRoom({
     onPreviousQueue();
   }, [isHost, onPreviousQueue]);
 
-  function unlockSound() {
+  const unlockSound = useCallback(() => {
+    if (!isHost) return;
     setSoundUnlocked(true);
     playerRef.current?.unmute();
-  }
+  }, [isHost]);
 
   return (
     <div className="mobile-shell">
@@ -194,7 +191,7 @@ export function MobileRoom({
               <button onClick={playPause} aria-label="Oynat/Duraklat" disabled={!isHost}>{playback?.isPlaying ? "⏸" : "▶"}</button>
               <button onClick={skipNext} aria-label="Sonraki" disabled={!isHost}>▶▶</button>
             </div>
-            {playback && !soundUnlocked ? (
+            {isHost && !soundUnlocked ? (
               <button type="button" className="mobile-sound-unlock" onClick={unlockSound}>
                 Sesi aç
               </button>
