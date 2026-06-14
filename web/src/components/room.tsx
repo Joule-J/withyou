@@ -747,6 +747,65 @@ export function Room({
         </aside>
       </div>
 
+      {showPlaylistOverlay ? (
+        <div className="playlist-overlay" role="dialog" aria-modal="true" aria-label="Tüm listeler">
+          <div className="playlist-overlay-backdrop" onClick={() => setShowPlaylistOverlay(false)} />
+          <section className="playlist-overlay-panel">
+            <div className="playlist-overlay-header">
+              <div>
+                <h2>Tüm listeler</h2>
+                <p className="panel-copy">DB’de kayıtlı tüm listeler burada görünür.</p>
+              </div>
+              <button type="button" className="icon-menu-button" onClick={() => setShowPlaylistOverlay(false)} aria-label="Kapat">
+                <CloseGlyph />
+              </button>
+            </div>
+
+            <div className="playlist-overlay-toolbar">
+              <button type="button" className="refresh-button" onClick={() => void refreshPlaylists()}>
+                <RefreshGlyph />
+                Yenile
+              </button>
+              <span className="panel-count-pill">{playlists.length} liste</span>
+            </div>
+
+            <div className="playlist-overlay-list-shell">
+              {playlists.length > 0 ? (
+                <ul className="playlist-overlay-list">
+                  {playlists.map((playlist, index) => (
+                    <li key={playlist.id} className={playlist.id === selectedPlaylistId ? "selected" : ""}>
+                      <Artwork
+                        className={`playlist-cover cover-${index % 4}`}
+                        src={playlist.tracks[0]?.thumbnailUrl}
+                        fallback={playlist.name}
+                      />
+                      <div className="playlist-item-copy" onClick={() => applyPlaylist(playlist)} style={{ cursor: "pointer" }}>
+                        <div className="playlist-item-topline">
+                          <strong>{playlist.name}</strong>
+                        </div>
+                        <small>
+                          {playlist.tracks.length} şarkı · {formatRelativeDate(playlist.updatedAt)}
+                        </small>
+                      </div>
+                      <button
+                        type="button"
+                        className="icon-menu-button pl-play"
+                        onClick={() => applyPlaylist(playlist)}
+                        aria-label={`${playlist.name} listesini yükle`}
+                      >
+                        <PlayMiniGlyph />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="saved-empty">Kayıtlı liste yok.</div>
+              )}
+            </div>
+          </section>
+        </div>
+      ) : null}
+
       {showAddPlaylistOverlay ? (
         <div className="playlist-overlay" role="dialog" aria-modal="true">
           <div className="playlist-overlay-backdrop" onClick={() => setShowAddPlaylistOverlay(false)} />
