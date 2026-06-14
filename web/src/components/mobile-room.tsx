@@ -40,6 +40,7 @@ export function MobileRoom({
   const [savedPlaylists, setSavedPlaylists] = useState<Playlist[]>([]);
   const [playlistsLoading, setPlaylistsLoading] = useState(false);
   const [playlistsError, setPlaylistsError] = useState<string | null>(null);
+  const [showPlaylistOverlay, setShowPlaylistOverlay] = useState(false);
   const playback = snapshot.playback;
   const isHost = snapshot.hostParticipantId === participantId;
   const playerRef = useRef<YouTubePlayerHandle>(null);
@@ -67,6 +68,29 @@ export function MobileRoom({
       cancelled = true;
     };
   }, [showPlaylists]);
+
+  useEffect(() => {
+    if (!showPlaylistOverlay) return;
+    let cancelled = false;
+    setPlaylistsLoading(true);
+    void listPlaylists()
+      .then((items) => {
+        if (cancelled) return;
+        setSavedPlaylists(items);
+        setPlaylistsError(null);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setPlaylistsError("Listeler yuklenemedi.");
+      })
+      .finally(() => {
+        if (!cancelled) setPlaylistsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [showPlaylistOverlay]);
 
   useEffect(() => {
     const player = playerRef.current;
@@ -105,7 +129,7 @@ export function MobileRoom({
   }, [playback, playerReady, serverNow]);
 
   const playPause = useCallback(() => {
-    if (!playback) return;
+    if (!playback || !isHost) return;
     onCommand({
       type: playback.isPlaying ? "pause" : "play",
       videoId: playback.videoId,
@@ -114,7 +138,7 @@ export function MobileRoom({
       positionSeconds: playback.positionSeconds ?? 0,
       clientCommandId: crypto.randomUUID(),
     });
-  }, [playback, onCommand]);
+  }, [playback, onCommand, isHost]);
 
   const skipNext = useCallback(() => {
     if (!isHost) return;
@@ -148,18 +172,20 @@ export function MobileRoom({
           ) : (
             <div className="mobile-empty">Şarkı bekleniyor</div>
           )}
-          <div className="mobile-now">
-            <div className="mobile-now-title">{playback?.title ?? "Henüz çalmıyor"}</div>
-            <div className="mobile-now-controls">
-              <button onClick={skipPrev} aria-label="Önceki">◀◀</button>
-              <button onClick={playPause} aria-label="Oynat/Duraklat">{playback?.isPlaying ? "⏸" : "▶"}</button>
-              <button onClick={skipNext} aria-label="Sonraki">▶▶</button>
+        <div className="mobile-now">
+          <div className="mobile-now-title">{playback?.title ?? "Henüz çalmıyor"}</div>
+          <div className="mobile-now-controls">
+              <button onClick={skipPrev} aria-label="Önceki" disabled={!isHost}>◀◀</button>
+              <button onClick={playPause} aria-label="Oynat/Duraklat" disabled={!isHost}>{playback?.isPlaying ? "⏸" : "▶"}</button>
+              <button onClick={skipNext} aria-label="Sonraki" disabled={!isHost}>▶▶</button>
             </div>
+            {!isHost ? <div className="mobile-readonly">Client modunda kontrol kapalı.</div> : null}
           </div>
         </div>
 
         <div className="mobile-actions">
           <button onClick={() => setShowPlaylists((s) => !s)} className="mobile-action">📚 Listeler</button>
+          <button onClick={() => setShowPlaylistOverlay(true)} className="mobile-action">🌐 Tüm listeler</button>
           <button onClick={() => setShowQueue((s) => !s)} className="mobile-action">📜 Sıra</button>
         </div>
 
@@ -172,6 +198,7 @@ export function MobileRoom({
               {savedPlaylists.map((playlist) => (
                 <li key={playlist.id} className="mobile-list-item">
                   <button
+                    disabled={!isHost}
                     onClick={() => {
                       if (!isHost) return;
                       onReplaceQueueTracks(playlist.tracks.map((track) => track.musicUrl));
@@ -196,7 +223,7 @@ export function MobileRoom({
                 <li key={t.id} className={`mobile-queue-item ${t.id === snapshot.activeQueueItemId ? "active" : ""}`}>
                   <div className="q-title">{t.title}</div>
                   <div className="q-actions">
-                    <button onClick={() => {
+                    <button disabled={!isHost} onClick={() => {
                       if (!isHost) return;
                       onCommand({ type: "change_track", videoId: t.videoId, musicUrl: t.musicUrl, title: t.title, positionSeconds: 0, clientCommandId: crypto.randomUUID(), isPlaying: true });
                     }}>Çal</button>
@@ -209,6 +236,50 @@ export function MobileRoom({
 
         {playerError ? <p className="mobile-error" role="alert">{playerError}</p> : null}
       </main>
+
+      {showPlaylistOverlay ? (
+        <div className="playlist-overlay" role="dialog" aria-modal="true" aria-label="Tüm listeler">
+          <div className="playlist-overlay-backdrop" onClick={() => setShowPlaylistOverlay(false)} />
+          <section className="playlist-overlay-panel">
+            <div className="playlist-overlay-header">
+              <div>
+                <h2>Tüm listeler</h2>
+                <p className="panel-copy">DB’de kayıtlı tüm listeler burada görünür.</p>
+              </div>
+              <button type="button" className="icon-menu-button" onClick={() => setShowPlaylistOverlay(false)} aria-label="Kapat">
+                ×
+              </button>
+            </div>
+            <div className="playlist-overlay-toolbar">
+              <button type="button" className="refresh-button" onClick={() => void listPlaylists().then(setSavedPlaylists)}>
+                Yenile
+              </button>
+              <span className="panel-count-pill">{savedPlaylists.length} liste</span>
+            </div>
+            <div className="playlist-overlay-list-shell">
+              {savedPlaylists.length > 0 ? (
+                <ul className="playlist-overlay-list">
+                  {savedPlaylists.map((playlist, index) => (
+                    <li key={playlist.id} className={playlist.id === snapshot.activeQueueItemId ? "selected" : ""}>
+                      <div className={`playlist-cover cover-${index % 4}`}>
+                        <span>{playlist.name.slice(0, 1).toUpperCase()}</span>
+                      </div>
+                      <div className="playlist-item-copy">
+                        <div className="playlist-item-topline">
+                          <strong>{playlist.name}</strong>
+                        </div>
+                        <small>{playlist.tracks.length} şarkı</small>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="saved-empty">Kayıtlı liste yok.</div>
+              )}
+            </div>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }
