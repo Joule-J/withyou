@@ -1750,7 +1750,14 @@ label {
   overflow-y: auto;
   min-height: 0;
   padding-right: 0.3rem;
+  max-height: 32rem; /* limit so lists scroll instead of stretching the sidebar */
+  scrollbar-gutter: stable;
 }
+
+/* Nice thin scrollbar for playlists */
+.pl-list::-webkit-scrollbar { width: 8px; }
+.pl-list::-webkit-scrollbar-thumb { background: rgba(245,95,145,0.22); border-radius: 8px; }
+.pl-list::-webkit-scrollbar-track { background: transparent; }
 
 .pl-item {
   display: grid;

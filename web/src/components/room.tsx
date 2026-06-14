@@ -539,7 +539,7 @@ export function Room({
 
             {/* Add playlist via overlay modal (opened with the + button) */}
 
-              <ul className="pl-list" style={{ maxHeight: 320, overflowY: "auto" }}>
+              <ul className="pl-list">
               {playlists.length > 0 ? (
                 playlists.map((playlist, index) => (
                   <li
