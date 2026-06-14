@@ -1095,6 +1095,51 @@ label {
   box-shadow: 0 20px 44px rgba(242, 183, 203, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.92);
 }
 
+/* Sidebar link bar (add-to-queue) styling to match compact rounded input with floating actions */
+.sidebar-link-bar {
+  position: relative;
+  padding: 0.9rem 1rem 1.4rem 1rem; /* leave room for floating button */
+  display: block;
+}
+
+.sidebar-link-bar > svg {
+  position: absolute;
+  left: 12px;
+  top: 10px;
+  color: rgba(36, 34, 36, 0.6);
+}
+
+.sidebar-link-bar input[type="url"] {
+  width: 100%;
+  border-radius: 14px;
+  padding: 1.05rem 1.2rem; /* vertical, horizontal */
+  padding-left: 3.2rem; /* space for the top-left icon */
+  border: 1px solid rgba(230,230,230,0.9);
+  background: #fff;
+  box-shadow: none;
+  font-size: 1rem;
+}
+
+.sidebar-link-bar button {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  width: 2.6rem;
+  height: 2.6rem;
+  border-radius: 12px;
+  border: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(245,95,145,0.06);
+  color: #f55f91;
+  z-index: 2;
+}
+
+.sidebar-link-bar button:hover:not(:disabled) {
+  background: rgba(245,95,145,0.12);
+}
+
 .sidebar-section-title {
   display: flex;
   align-items: center;
