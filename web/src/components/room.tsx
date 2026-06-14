@@ -156,6 +156,11 @@ export function Room({
   }, [refreshPlaylists, snapshot.roomCode]);
 
   useEffect(() => {
+    if (!showPlaylistOverlay) return;
+    void refreshPlaylists();
+  }, [refreshPlaylists, showPlaylistOverlay]);
+
+  useEffect(() => {
     applyPlayback("snapshot");
   }, [applyPlayback]);
 
@@ -233,6 +238,7 @@ export function Room({
       setSelectedPlaylistId(playlist.id);
       setPlaylistError(null);
       setShowAddPlaylistOverlay(false);
+      void refreshPlaylists();
     } catch {
       setPlaylistError("Liste kaydedilemedi.");
     } finally {
@@ -298,6 +304,7 @@ export function Room({
       }
       setPlaylistError(null);
       setConfirmDeleteId(null);
+      void refreshPlaylists();
     } catch {
       setPlaylistError("Liste silinemedi.");
     } finally {
@@ -321,6 +328,7 @@ export function Room({
       try {
         const playlist = await persistPlaylistOrder(selectedPlaylistId, nextQueue.map((track) => track.musicUrl));
         setPlaylists((existing) => existing.map((entry) => (entry.id === playlist.id ? playlist : entry)));
+        void refreshPlaylists();
       } catch {
         setPlaylistError("Liste sirasi kaydedilemedi.");
       }
