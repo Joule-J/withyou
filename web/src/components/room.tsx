@@ -91,6 +91,16 @@ export function Room({
     }
   }, []);
 
+  // When the queue length changes, scroll the queue list to show newest items
+  useEffect(() => {
+    if (!queueListRef.current) return;
+    try {
+      queueListRef.current.scrollTo({ top: queueListRef.current.scrollHeight, behavior: "smooth" });
+    } catch {
+      queueListRef.current.scrollTop = queueListRef.current.scrollHeight;
+    }
+  }, [queue.length]);
+
   const applyPlayback = useCallback(
     (mode: "snapshot" | "drift" = "snapshot") => {
       const player = playerRef.current;
@@ -708,15 +718,6 @@ export function Room({
           </section>
 
 
-  // When the queue length changes, scroll the queue list to show newest items
-  useEffect(() => {
-    if (!queueListRef.current) return;
-    try {
-      queueListRef.current.scrollTo({ top: queueListRef.current.scrollHeight, behavior: "smooth" });
-    } catch {
-      queueListRef.current.scrollTop = queueListRef.current.scrollHeight;
-    }
-  }, [queue.length]);
           <form className="sidebar-link-bar sidebar-card" onSubmit={submitQueueLink}>
             <LinkGlyph />
             <input
