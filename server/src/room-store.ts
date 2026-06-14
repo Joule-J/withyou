@@ -145,10 +145,7 @@ export class RoomStore {
       positionSeconds: command.positionSeconds,
       updatedAtServerMs: this.now(),
     };
-    if (command.type === "change_track") {
-      const matchingTrack = room.queue.find((track) => track.musicUrl === parsedUrl.normalizedUrl);
-      room.activeQueueItemId = matchingTrack?.id ?? null;
-    }
+    if (command.type === "change_track") room.activeQueueItemId = null;
     return room.playback;
   }
 
