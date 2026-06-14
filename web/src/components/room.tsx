@@ -58,7 +58,7 @@ export function Room({
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [playlistBusy, setPlaylistBusy] = useState(false);
   const [selectedPlaylistId, setSelectedPlaylistId] = useState<string | null>(null);
-  const [showPlaylistForm, setShowPlaylistForm] = useState(false);
+  const [showAddPlaylistOverlay, setShowAddPlaylistOverlay] = useState(false);
   const [showPlaylistOverlay, setShowPlaylistOverlay] = useState(false);
   const [draggedQueueTrackId, setDraggedQueueTrackId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -221,6 +221,7 @@ export function Room({
       setPlaylists((existing) => [playlist, ...existing.filter((item) => item.id !== playlist.id)]);
       setSelectedPlaylistId(playlist.id);
       setPlaylistError(null);
+      setShowAddPlaylistOverlay(false);
     } catch {
       setPlaylistError("Liste kaydedilemedi.");
     } finally {
@@ -255,6 +256,19 @@ export function Room({
     setQueueDraft(playlist.tracks.map((track) => track.musicUrl).join("\n"));
     if (isHost) {
       onReplaceQueueTracks(playlist.tracks.map((track) => track.musicUrl));
+      // Ensure the host starts playing the first track immediately
+      if (playlist.tracks.length > 0) {
+        const first = playlist.tracks[0];
+        onCommand({
+          type: "change_track",
+          videoId: first.videoId,
+          musicUrl: first.musicUrl,
+          title: first.title,
+          positionSeconds: 0,
+          clientCommandId: crypto.randomUUID(),
+          isPlaying: true,
+        });
+      }
     }
   }
 
@@ -500,44 +514,7 @@ export function Room({
             </ul>
           </section>
 
-          {showPlaylistOverlay ? (
-            <section className="playlist-inline-panel sidebar-card">
-              <div className="sidebar-section-title">
-                <div className="sidebar-title-copy">
-                  <h3>Tüm listeler</h3>
-                </div>
-                <button type="button" className="icon-menu-button" onClick={() => setShowPlaylistOverlay(false)} aria-label="Kapat">
-                  <CloseGlyph />
-                </button>
-              </div>
-              <ul className="playlist-inline-list">
-                {playlists.map((playlist, index) => (
-                  <li key={playlist.id} className="playlist-box">
-                    <Artwork
-                      className={`playlist-cover cover-${index % 4}`}
-                      src={playlist.tracks[0]?.thumbnailUrl}
-                      fallback={playlist.name}
-                    />
-                    <div className="playlist-box-info">
-                      <strong>{playlist.name}</strong>
-                      <small>{playlist.tracks.length} şarkı</small>
-                    </div>
-                    <button
-                      type="button"
-                      className="icon-menu-button"
-                      onClick={() => {
-                        applyPlaylist(playlist);
-                        setShowPlaylistOverlay(false);
-                      }}
-                      aria-label={`${playlist.name} listesini oynat`}
-                    >
-                      <PlayMiniGlyph />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ) : null}
+          {null}
 
           <section className="playlists-panel sidebar-card">
             <div className="sidebar-section-title">
@@ -548,44 +525,21 @@ export function Room({
               {isHost ? (
                 <button
                   type="button"
-                  className={`panel-action-pill${showPlaylistForm ? " panel-action-pill--on" : ""}`}
-                  onClick={() => setShowPlaylistForm((current) => !current)}
+                  className={`panel-action-pill`}
+                  onClick={() => setShowAddPlaylistOverlay(true)}
+                  title="Yeni liste ekle"
+                  aria-label="Yeni liste ekle"
                 >
-                  {showPlaylistForm ? <CloseGlyph /> : <PlusGlyph />}
-                  {showPlaylistForm ? "Kapat" : "Yeni"}
+                  <PlusGlyph />
                 </button>
               ) : (
                 <span className="panel-count-pill">{playlists.length} liste</span>
               )}
             </div>
 
-            {isHost && showPlaylistForm ? (
-              <form className="pf-form" onSubmit={submitPlaylist}>
-                <label htmlFor="playlist-name">Liste adı</label>
-                <input
-                  id="playlist-name"
-                  value={playlistName}
-                  placeholder="liste1"
-                  onChange={(event) => setPlaylistName(event.target.value)}
-                />
-                <label htmlFor="queue-links">Linkler</label>
-                <textarea
-                  id="queue-links"
-                  value={queueDraft}
-                  rows={3}
-                  placeholder={"https://music.youtube.com/watch?v=...\nhttps://music.youtube.com/watch?v=..."}
-                  onChange={(event) => setQueueDraft(event.target.value)}
-                />
-                <div className="pf-actions">
-                  <button type="submit" className="pf-save" disabled={playlistBusy}>
-                    Kaydet
-                  </button>
-                </div>
-                {playlistError ? <p className="error-message" role="alert">{playlistError}</p> : null}
-              </form>
-            ) : null}
+            {/* Add playlist via overlay modal (opened with the + button) */}
 
-            <ul className="pl-list">
+              <ul className="pl-list" style={{ maxHeight: 320, overflowY: "auto" }}>
               {playlists.length > 0 ? (
                 playlists.map((playlist, index) => (
                   <li
@@ -597,7 +551,7 @@ export function Room({
                       src={playlist.tracks[0]?.thumbnailUrl}
                       fallback={playlist.name}
                     />
-                    <div className="pl-info">
+                    <div className="pl-info" onClick={() => applyPlaylist(playlist)} style={{ cursor: "pointer" }}>
                       <strong>{playlist.name}</strong>
                       <small>
                         {playlist.tracks.length} şarkı · {formatRelativeDate(playlist.updatedAt)}
@@ -768,7 +722,42 @@ export function Room({
         </aside>
       </div>
 
-      {null}
+      {showAddPlaylistOverlay ? (
+        <div className="playlist-overlay" role="dialog" aria-modal="true">
+          <div className="playlist-overlay-backdrop" onClick={() => setShowAddPlaylistOverlay(false)} />
+          <section className="playlist-overlay-panel">
+            <div className="playlist-overlay-header">
+              <h2>Yeni liste</h2>
+              <button type="button" className="icon-menu-button" onClick={() => setShowAddPlaylistOverlay(false)} aria-label="Kapat">
+                <CloseGlyph />
+              </button>
+            </div>
+            <form className="pf-form" onSubmit={submitPlaylist}>
+              <label htmlFor="playlist-name">Liste adı</label>
+              <input
+                id="playlist-name"
+                value={playlistName}
+                placeholder="liste1"
+                onChange={(event) => setPlaylistName(event.target.value)}
+              />
+              <label htmlFor="queue-links">Linkler</label>
+              <textarea
+                id="queue-links"
+                value={queueDraft}
+                rows={6}
+                placeholder={"https://music.youtube.com/watch?v=...\nhttps://music.youtube.com/watch?v=..."}
+                onChange={(event) => setQueueDraft(event.target.value)}
+              />
+              <div className="pf-actions">
+                <button type="submit" className="pf-save" disabled={playlistBusy}>
+                  Kaydet
+                </button>
+              </div>
+              {playlistError ? <p className="error-message" role="alert">{playlistError}</p> : null}
+            </form>
+          </section>
+        </div>
+      ) : null}
     </main>
   );
 }
