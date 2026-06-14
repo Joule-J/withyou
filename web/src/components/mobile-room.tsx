@@ -51,6 +51,7 @@ export function MobileRoom({
     pause: () => void;
     nexttrack: () => void;
     previoustrack: () => void;
+    seekto: (details: MediaSessionActionDetails) => void;
   } | null>(null);
 
   useEffect(() => {
@@ -200,13 +201,23 @@ export function MobileRoom({
     mediaSession.playbackState = playback.isPlaying ? "playing" : "paused";
     updatePositionState();
 
+    const applyLocalPlay = () => {
+      unlockSound();
+      playerRef.current?.play();
+      mediaSession.playbackState = "playing";
+      updatePositionState();
+    };
+
+    const applyLocalPause = () => {
+      playerRef.current?.pause();
+      mediaSession.playbackState = "paused";
+      updatePositionState();
+    };
+
     mediaSessionActionsRef.current = {
       play: () => {
         if (!isHost) return;
-        unlockSound();
-        playerRef.current?.play();
-        mediaSession.playbackState = "playing";
-        updatePositionState();
+        applyLocalPlay();
         onCommand({
           type: "play",
           videoId: playback.videoId,
@@ -218,9 +229,7 @@ export function MobileRoom({
       },
       pause: () => {
         if (!isHost) return;
-        playerRef.current?.pause();
-        mediaSession.playbackState = "paused";
-        updatePositionState();
+        applyLocalPause();
         onCommand({
           type: "pause",
           videoId: playback.videoId,
@@ -240,6 +249,21 @@ export function MobileRoom({
         unlockSound();
         onPreviousQueue();
       },
+      seekto: (details: MediaSessionActionDetails) => {
+        if (!isHost) return;
+        const nextPosition = typeof details.seekTime === "number" ? details.seekTime : playback.positionSeconds ?? 0;
+        playerRef.current?.seek(nextPosition);
+        if (details.fastSeek) playerRef.current?.seek(nextPosition);
+        updatePositionState();
+        onCommand({
+          type: "seek",
+          videoId: playback.videoId,
+          musicUrl: playback.musicUrl,
+          title: playback.title,
+          positionSeconds: nextPosition,
+          clientCommandId: crypto.randomUUID(),
+        });
+      },
     };
 
     const handlers = mediaSessionActionsRef.current;
@@ -247,12 +271,14 @@ export function MobileRoom({
     mediaSession.setActionHandler("pause", handlers.pause);
     mediaSession.setActionHandler("nexttrack", handlers.nexttrack);
     mediaSession.setActionHandler("previoustrack", handlers.previoustrack);
+    mediaSession.setActionHandler("seekto", handlers.seekto);
 
     return () => {
       mediaSession.setActionHandler("play", null);
       mediaSession.setActionHandler("pause", null);
       mediaSession.setActionHandler("nexttrack", null);
       mediaSession.setActionHandler("previoustrack", null);
+      mediaSession.setActionHandler("seekto", null);
     };
   }, [isHost, onAdvanceQueue, onCommand, onPreviousQueue, playback, snapshot.roomCode, unlockSound]);
 
@@ -272,6 +298,26 @@ export function MobileRoom({
       }
     }
   }, [playback?.isPlaying, playback?.positionSeconds, playback?.updatedAtServerMs]);
+
+  useEffect(() => {
+    if (!playback) return;
+    const interval = window.setInterval(() => {
+      if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
+      const mediaSession = navigator.mediaSession;
+      if (typeof mediaSession.setPositionState !== "function") return;
+      try {
+        mediaSession.setPositionState({
+          duration: playerRef.current?.duration() ?? 0,
+          position: playerRef.current?.currentTime() ?? playback.positionSeconds ?? 0,
+          playbackRate: playback.isPlaying ? 1 : 0,
+        });
+      } catch {
+        // Ignore browsers that reject the state update.
+      }
+    }, 1_000);
+
+    return () => window.clearInterval(interval);
+  }, [playback]);
 
   return (
     <div className="mobile-shell">
