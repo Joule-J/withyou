@@ -172,6 +172,22 @@ export function MobileRoom({
     if (typeof navigator === "undefined" || !("mediaSession" in navigator) || !playback) return;
 
     const mediaSession = navigator.mediaSession;
+    const updatePositionState = () => {
+      if (typeof mediaSession.setPositionState !== "function") return;
+      const duration = playerRef.current?.duration() ?? 0;
+      const position = playerRef.current?.currentTime() ?? playback.positionSeconds ?? 0;
+      const playbackRate = playback.isPlaying ? 1 : 0;
+      try {
+        mediaSession.setPositionState({
+          duration: Number.isFinite(duration) ? Math.max(duration, 0) : 0,
+          position: Math.max(0, position),
+          playbackRate,
+        });
+      } catch {
+        // Ignore browsers that reject incomplete position data.
+      }
+    };
+
     mediaSession.metadata = new MediaMetadata({
       title: playback.title ?? "WithYou",
       artist: "WithYou",
@@ -182,12 +198,15 @@ export function MobileRoom({
     });
 
     mediaSession.playbackState = playback.isPlaying ? "playing" : "paused";
+    updatePositionState();
 
     mediaSessionActionsRef.current = {
       play: () => {
         if (!isHost) return;
         unlockSound();
         playerRef.current?.play();
+        mediaSession.playbackState = "playing";
+        updatePositionState();
         onCommand({
           type: "play",
           videoId: playback.videoId,
@@ -200,6 +219,8 @@ export function MobileRoom({
       pause: () => {
         if (!isHost) return;
         playerRef.current?.pause();
+        mediaSession.playbackState = "paused";
+        updatePositionState();
         onCommand({
           type: "pause",
           videoId: playback.videoId,
@@ -234,6 +255,23 @@ export function MobileRoom({
       mediaSession.setActionHandler("previoustrack", null);
     };
   }, [isHost, onAdvanceQueue, onCommand, onPreviousQueue, playback, snapshot.roomCode, unlockSound]);
+
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !("mediaSession" in navigator) || !playback) return;
+    const mediaSession = navigator.mediaSession;
+    mediaSession.playbackState = playback.isPlaying ? "playing" : "paused";
+    if (typeof mediaSession.setPositionState === "function") {
+      try {
+        mediaSession.setPositionState({
+          duration: playerRef.current?.duration() ?? 0,
+          position: playerRef.current?.currentTime() ?? playback.positionSeconds ?? 0,
+          playbackRate: playback.isPlaying ? 1 : 0,
+        });
+      } catch {
+        // Ignore unsupported browsers.
+      }
+    }
+  }, [playback?.isPlaying, playback?.positionSeconds, playback?.updatedAtServerMs]);
 
   return (
     <div className="mobile-shell">
