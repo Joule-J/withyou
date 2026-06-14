@@ -550,7 +550,8 @@ export function Room({
 
             {/* Add playlist via overlay modal (opened with the + button) */}
 
-              <ul className="pl-list">
+              <div className="pl-scroll-panel">
+                <ul className="pl-list">
               {playlists.length > 0 ? (
                 playlists.map((playlist, index) => (
                   <li
@@ -621,7 +622,8 @@ export function Room({
                   {playlistBusy ? "Yükleniyor…" : "Kayıtlı liste yok."}
                 </li>
               )}
-            </ul>
+              </ul>
+            </div>
 
             <button
               type="button"

@@ -1741,14 +1741,11 @@ label {
 
 .pl-list {
   list-style: none;
-  padding: 0 0.2rem 0 0;
-  margin: 0.15rem 0 0;
-  display: grid;
-  gap: 0.7rem;
+  padding: 0;
+  margin: 0;
+  display: block;
   min-height: 0;
-  overflow-y: auto;
   padding-right: 0.3rem;
-  max-height: 32rem; /* limit so lists scroll instead of stretching the sidebar */
   scrollbar-gutter: stable;
 }
 
@@ -1771,7 +1768,7 @@ label {
   overflow: hidden;
   isolation: isolate;
   background-clip: padding-box;
-  margin-bottom: 0; /* grid gap handles spacing */
+  margin-bottom: 0.7rem; /* ensure spacing between items when inside scroll panel */
 }
 
 .pl-item::before {
@@ -1795,6 +1792,19 @@ label {
   border-color: rgba(255, 114, 159, 0.28);
   z-index: 1;
 }
+
+/* Scroll wrapper for playlists (separate from sidebar) */
+.pl-scroll-panel {
+  max-height: 28rem; /* limit height so the panel becomes scrollable */
+  overflow-y: auto;
+  padding: 0.6rem 0.4rem 0.6rem 0.4rem;
+  margin-top: 0.6rem;
+}
+
+/* Match queue scrollbar appearance */
+.pl-scroll-panel::-webkit-scrollbar { width: 10px; }
+.pl-scroll-panel::-webkit-scrollbar-thumb { background: rgba(245,95,145,0.18); border-radius: 8px; }
+.pl-scroll-panel::-webkit-scrollbar-track { background: transparent; }
 
 /* Defensive: ensure adjacent items don't collapse visually */
 .pl-list > .pl-item:last-child { margin-bottom: 0; }
