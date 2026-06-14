@@ -5,6 +5,8 @@ interface YouTubePlayer {
   cueVideoById(options: { videoId: string; startSeconds?: number }): void;
   playVideo(): void;
   pauseVideo(): void;
+  mute(): void;
+  unMute(): void;
   seekTo(seconds: number, allowSeekAhead: boolean): void;
   getCurrentTime(): number;
   getDuration(): number;

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { listPlaylists, type Playlist } from "../lib/playlists";
 import type { PlayerCommand, RoomSnapshot } from "../types";
 import type { YouTubePlayerHandle } from "./youtube-player";
 import { YouTubePlayer } from "./youtube-player";
@@ -36,10 +37,36 @@ export function MobileRoom({
   const [showQueue, setShowQueue] = useState(true);
   const [playerReady, setPlayerReady] = useState(false);
   const [playerError, setPlayerError] = useState<string | null>(null);
+  const [savedPlaylists, setSavedPlaylists] = useState<Playlist[]>([]);
+  const [playlistsLoading, setPlaylistsLoading] = useState(false);
+  const [playlistsError, setPlaylistsError] = useState<string | null>(null);
   const playback = snapshot.playback;
   const isHost = snapshot.hostParticipantId === participantId;
   const playerRef = useRef<YouTubePlayerHandle>(null);
   const settleUntilRef = useRef(0);
+
+  useEffect(() => {
+    if (!showPlaylists) return;
+    let cancelled = false;
+    setPlaylistsLoading(true);
+    void listPlaylists()
+      .then((items) => {
+        if (cancelled) return;
+        setSavedPlaylists(items);
+        setPlaylistsError(null);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setPlaylistsError("Listeler yuklenemedi.");
+      })
+      .finally(() => {
+        if (!cancelled) setPlaylistsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [showPlaylists]);
 
   useEffect(() => {
     const player = playerRef.current;
@@ -54,6 +81,9 @@ export function MobileRoom({
     const currentPosition = player.currentTime();
 
     if (currentVideoId !== playback.videoId) {
+      if (playback.isPlaying) {
+        player.mute();
+      }
       player.load(playback.videoId, target, playback.isPlaying);
       settleUntilRef.current = now + POST_ACTION_SETTLE_MS;
       return;
@@ -65,6 +95,7 @@ export function MobileRoom({
     }
 
     if (playback.isPlaying && playerState !== 1) {
+      player.mute();
       player.play();
     }
 
@@ -135,24 +166,24 @@ export function MobileRoom({
         {showPlaylists ? (
           <section className="mobile-panel mobile-playlists">
             <h3>Listeler</h3>
-            <p className="muted">Tüm listeler burada gösterilecek — dokunup çalın.</p>
+            {playlistsError ? <p className="mobile-error">{playlistsError}</p> : null}
+            {playlistsLoading ? <p className="muted">Listeler yükleniyor...</p> : null}
             <ul>
-              {snapshot && snapshot.queue && snapshot.queue.slice(0, 20).map((t) => (
-                <li key={t.id} className="mobile-list-item">
-                  <button onClick={() => {
-                    if (!isHost) return;
-                    onCommand({
-                      type: "change_track",
-                      videoId: t.videoId,
-                      musicUrl: t.musicUrl,
-                      title: t.title,
-                      positionSeconds: 0,
-                      clientCommandId: crypto.randomUUID(),
-                      isPlaying: true,
-                    });
-                  }}>{t.title}</button>
+              {savedPlaylists.map((playlist) => (
+                <li key={playlist.id} className="mobile-list-item">
+                  <button
+                    onClick={() => {
+                      if (!isHost) return;
+                      onReplaceQueueTracks(playlist.tracks.map((track) => track.musicUrl));
+                    }}
+                  >
+                    {playlist.name} · {playlist.tracks.length} şarkı
+                  </button>
                 </li>
               ))}
+              {!playlistsLoading && savedPlaylists.length === 0 ? (
+                <li className="mobile-empty-list">Kayıtlı liste yok.</li>
+              ) : null}
             </ul>
           </section>
         ) : null}

@@ -4,6 +4,8 @@ export type YouTubePlayerHandle = {
   load(videoId: string, startSeconds: number, autoplay: boolean): void;
   play(): void;
   pause(): void;
+  mute(): void;
+  unmute(): void;
   seek(seconds: number): void;
   currentTime(): number;
   duration(): number;
@@ -101,6 +103,8 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, Props>(function You
       },
       play: () => playerRef.current?.playVideo(),
       pause: () => playerRef.current?.pauseVideo(),
+      mute: () => playerRef.current?.mute(),
+      unmute: () => playerRef.current?.unMute(),
       seek: (seconds) => playerRef.current?.seekTo(seconds, true),
       currentTime: () => playerRef.current?.getCurrentTime() ?? 0,
       duration: () => playerRef.current?.getDuration() ?? 0,
