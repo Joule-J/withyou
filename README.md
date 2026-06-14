@@ -48,14 +48,19 @@ create unique index if not exists saved_tracks_owner_video_idx
 ## Named playlists with Supabase + Prisma
 
 The right panel now works with named playlists such as `liste1`, `aksam`, or
-`roadtrip`. Selecting a saved playlist loads its URLs into the room queue.
+`roadtrip`. These playlists are stored in the shared database, so anyone who
+opens the site sees the same saved lists. Selecting a saved playlist loads its
+URLs into the room queue.
 
-Create `.env.local` in the project root:
+Create `.env` in the project root:
 
 ```text
 DATABASE_URL="postgresql://postgres....pooler.supabase.com:6543/postgres?pgbouncer=true"
 DIRECT_URL="postgresql://postgres....pooler.supabase.com:5432/postgres"
 ```
+
+The server now also reads `.env.local` if you prefer that during local
+development, but Prisma CLI commands such as `db push` should still use `.env`.
 
 Then run:
 

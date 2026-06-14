@@ -1,6 +1,8 @@
 import { createApp } from "./app.js";
 import { loadConfig } from "./config.js";
+import { loadEnvironmentFiles } from "./env.js";
 
+loadEnvironmentFiles();
 const config = loadConfig();
 const { httpServer } = createApp(config);
 

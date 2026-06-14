@@ -67,6 +67,8 @@ export function Room({
   const queue = snapshot.queue ?? [];
   const activeQueueItemId = snapshot.activeQueueItemId ?? null;
   const { previousTrack, nextTrack } = queueNeighbors(queue, activeQueueItemId);
+  const currentTrackLabel = playback?.title || playback?.videoId || "Henüz şarkı seçilmedi";
+  const selectedPlaylist = playlists.find((playlist) => playlist.id === selectedPlaylistId) ?? null;
 
   const refreshPlaylists = useCallback(async () => {
     setPlaylistBusy(true);
@@ -131,9 +133,8 @@ export function Room({
   );
 
   useEffect(() => {
-    if (!isHost) return;
     void refreshPlaylists();
-  }, [isHost, refreshPlaylists]);
+  }, [refreshPlaylists, snapshot.roomCode]);
 
   useEffect(() => {
     applyPlayback("snapshot");
@@ -174,6 +175,11 @@ export function Room({
       positionSeconds: Math.max(0, nextPosition),
       clientCommandId: crypto.randomUUID(),
     });
+  }
+
+  function commitSeek(nextPosition: number) {
+    if (!playback) return;
+    command("seek", nextPosition);
   }
 
   function submitTrack(event: FormEvent) {
@@ -248,6 +254,18 @@ export function Room({
     setQueueDraft(playlist.tracks.map((track) => track.musicUrl).join("\n"));
     if (isHost) {
       onReplaceQueueTracks(playlist.tracks.map((track) => track.musicUrl));
+      if (!playback && playlist.tracks[0]) {
+        const firstTrack = playlist.tracks[0];
+        onCommand({
+          type: "change_track",
+          videoId: firstTrack.videoId,
+          musicUrl: firstTrack.musicUrl,
+          title: firstTrack.title,
+          positionSeconds: 0,
+          clientCommandId: crypto.randomUUID(),
+          isPlaying: true,
+        });
+      }
     }
   }
 
@@ -293,7 +311,7 @@ export function Room({
           <div className="panel-title wide">
             <div>
               <h2>Birlikte Dinle</h2>
-              <p className="panel-copy">Host parçayı belirler, oda aynı anda dinler.</p>
+              <p className="panel-copy">Şu an çalan: {currentTrackLabel}</p>
             </div>
             {playback ? <span>{formatTime(position)} / {formatTime(duration)}</span> : null}
           </div>
@@ -305,12 +323,7 @@ export function Room({
               onError={setPlayerError}
               onEnded={handlePlayerEnded}
             />
-          ) : (
-            <div className="player-frame empty-player">
-              <img src="/love.png" alt="" aria-hidden="true" />
-              <span>Şarkı bekleniyor</span>
-            </div>
-          )}
+          ) : null}
 
           {needsUnlock ? (
             <button
@@ -331,8 +344,20 @@ export function Room({
 
           {isHost ? (
             <div className="host-controls">
-              <div className="transport-card compact">
-                <div className="transport-controls">
+              <div className="track-meta compact player-now-card">
+                <div className="track-meta-copy">
+                  <span>Şu an çalan</span>
+                  <strong>{currentTrackLabel}</strong>
+                </div>
+                {playback ? (
+                  <div className="track-meta-actions">
+                    <a href={playback.musicUrl} target="_blank" rel="noreferrer">YouTube Music</a>
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="transport-card player-transport">
+                <div className="transport-controls modern">
                   <button
                     type="button"
                     className="transport-icon"
@@ -340,7 +365,7 @@ export function Room({
                     onClick={previousQueueTrack}
                     aria-label="Önceki şarkı"
                   >
-                    {"<<"}
+                    <TransportGlyph kind="previous" />
                   </button>
                   <button
                     type="button"
@@ -349,7 +374,7 @@ export function Room({
                     onClick={() => command(playback?.isPlaying ? "pause" : "play")}
                     aria-label={playback?.isPlaying ? "Duraklat" : "Oynat"}
                   >
-                    {playback?.isPlaying ? "||" : ">"}
+                    <TransportGlyph kind={playback?.isPlaying ? "pause" : "play"} />
                   </button>
                   <button
                     type="button"
@@ -358,44 +383,42 @@ export function Room({
                     onClick={skipQueueTrack}
                     aria-label="Sonraki şarkı"
                   >
-                    {">>"}
+                    <TransportGlyph kind="next" />
                   </button>
                 </div>
 
-                <div className="seek-stack">
+                <div className="transport-strip">
                   <div className="queue-preview-card prev">
                     <span>Önceki</span>
                     <strong>{previousTrack?.title || previousTrack?.videoId || "Yok"}</strong>
                   </div>
 
-                  <div className="seek-control">
-                    <div className="timeline-shell">
-                      <div className="timeline-readout">
-                        <span>{formatTime(seekValue)}</span>
-                        <span>{formatTime(duration)}</span>
-                      </div>
-                      <div className="timeline-track">
-                        <span className="timeline-fill" style={{ width: `${timelinePercent(seekValue, duration)}%` }} />
-                        <span className="timeline-cursor" style={{ left: `${timelinePercent(seekValue, duration)}%` }} />
-                        <div className="timeline-ticks" aria-hidden="true">
-                          {Array.from({ length: 9 }).map((_, index) => <i key={index} />)}
-                        </div>
-                        <input
-                          id="seek-range"
-                          aria-label="Oynatma zamanı"
-                          type="range"
-                          min="0"
-                          max={Math.max(duration, 1)}
-                          step="1"
-                          value={Math.min(seekValue, Math.max(duration, 1))}
-                          disabled={!playback}
-                          onChange={(event) => setSeekValue(Number(event.target.value))}
-                        />
-                      </div>
+                  <div className="seek-control modern">
+                    <div className="timeline-readout">
+                      <span>{formatTime(seekValue)}</span>
+                      <span>{formatTime(duration)}</span>
                     </div>
-                    <button className="seek-commit" disabled={!playback} onClick={() => command("seek", seekValue)}>
-                      Bu zamana git
-                    </button>
+                    <div className="timeline-track modern">
+                      <span className="timeline-fill" style={{ width: `${timelinePercent(seekValue, duration)}%` }} />
+                      <input
+                        id="seek-range"
+                        aria-label="Oynatma zamanı"
+                        type="range"
+                        min="0"
+                        max={Math.max(duration, 1)}
+                        step="1"
+                        value={Math.min(seekValue, Math.max(duration, 1))}
+                        disabled={!playback}
+                        onChange={(event) => setSeekValue(Number(event.target.value))}
+                        onMouseUp={(event) => commitSeek(Number((event.target as HTMLInputElement).value))}
+                        onTouchEnd={(event) => commitSeek(Number((event.target as HTMLInputElement).value))}
+                        onKeyUp={(event) => {
+                          if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+                            commitSeek(Number((event.target as HTMLInputElement).value));
+                          }
+                        }}
+                      />
+                    </div>
                   </div>
 
                   <div className="queue-preview-card next">
@@ -403,15 +426,6 @@ export function Room({
                     <strong>{nextTrack?.title || nextTrack?.videoId || "Yok"}</strong>
                   </div>
                 </div>
-              </div>
-
-              <div className="track-meta compact">
-                <strong>{playback?.title || playback?.videoId || "Host henüz bir şarkı seçmedi"}</strong>
-                {playback ? (
-                  <div className="track-meta-actions">
-                    <a href={playback.musicUrl} target="_blank" rel="noreferrer">YouTube Music</a>
-                  </div>
-                ) : null}
               </div>
 
               <form className="track-form compact" onSubmit={submitTrack}>
@@ -528,6 +542,25 @@ export function Room({
               </ul>
             </div>
 
+            <div className="playlist-detail-card">
+              <div className="saved-tracks-title">
+                <h3>{selectedPlaylist ? `${selectedPlaylist.name} şarkıları` : "Liste içeriği"}</h3>
+                <span>{selectedPlaylist?.tracks.length ?? 0} şarkı</span>
+              </div>
+              <ol className="playlist-track-list">
+                {selectedPlaylist ? (
+                  selectedPlaylist.tracks.map((track) => (
+                    <li key={track.id}>
+                      <strong>{track.title || track.videoId}</strong>
+                      <small>{track.musicUrl}</small>
+                    </li>
+                  ))
+                ) : (
+                  <li className="saved-empty">Bir liste seçince şarkılar burada görünür.</li>
+                )}
+              </ol>
+            </div>
+
             <div className="queue-note room-queue-label">Odadaki sıra</div>
             <ol className="queue-list">
               {queue.length > 0 ? (
@@ -584,4 +617,41 @@ function queueNeighbors(queue: RoomSnapshot["queue"], activeQueueItemId: string 
     previousTrack: queue[(currentIndex - 1 + queue.length) % queue.length] ?? null,
     nextTrack: queue[(currentIndex + 1) % queue.length] ?? null,
   };
+}
+
+type TransportGlyphProps = {
+  kind: "previous" | "play" | "pause" | "next";
+};
+
+function TransportGlyph({ kind }: TransportGlyphProps) {
+  if (kind === "play") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M8 6.5 18 12 8 17.5Z" fill="currentColor" />
+      </svg>
+    );
+  }
+
+  if (kind === "pause") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="7" y="6.5" width="3.5" height="11" rx="1" fill="currentColor" />
+        <rect x="13.5" y="6.5" width="3.5" height="11" rx="1" fill="currentColor" />
+      </svg>
+    );
+  }
+
+  if (kind === "previous") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M6 6.5h2v11H6zM18 6.5v11L9 12z" fill="currentColor" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M16 6.5h2v11h-2zM6 6.5v11l9-5.5z" fill="currentColor" />
+    </svg>
+  );
 }
