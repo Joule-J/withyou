@@ -25,7 +25,7 @@ type Props = {
   error: string | null;
   serverNow: () => number;
   onCommand: (command: PlayerCommand) => void;
-  onAddQueueTracks: (musicUrls: string[]) => void;
+  onAddQueueTracks: (musicUrls: string[], insertAfterId?: string) => void;
   onReplaceQueueTracks: (musicUrls: string[]) => void;
   onReorderQueue: (orderedTrackIds: string[]) => void;
   onAdvanceQueue: () => void;
@@ -61,6 +61,7 @@ export function Room({
   const [showPlaylistForm, setShowPlaylistForm] = useState(false);
   const [showPlaylistOverlay, setShowPlaylistOverlay] = useState(false);
   const [draggedQueueTrackId, setDraggedQueueTrackId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [needsUnlock, setNeedsUnlock] = useState(false);
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -198,7 +199,7 @@ export function Room({
     }
 
     setQueueLinkError(null);
-    onAddQueueTracks([parsed.normalizedUrl]);
+    onAddQueueTracks([parsed.normalizedUrl], snapshot.activeQueueItemId ?? undefined);
     setQueueLinkDraft("");
   }
 
@@ -258,18 +259,17 @@ export function Room({
   }
 
   async function removePlaylist(playlistId: string) {
-    const playlist = playlists.find((entry) => entry.id === playlistId);
-    if (!window.confirm(`"${playlist?.name ?? "Bu liste"}" silinsin mi?`)) return;
     setPlaylistBusy(true);
     try {
       await deleteNamedPlaylist(playlistId);
-      setPlaylists((existing) => existing.filter((playlist) => playlist.id !== playlistId));
+      setPlaylists((existing) => existing.filter((p) => p.id !== playlistId));
       if (selectedPlaylistId === playlistId) {
         setSelectedPlaylistId(null);
         setPlaylistName("");
         setQueueDraft("");
       }
       setPlaylistError(null);
+      setConfirmDeleteId(null);
     } catch {
       setPlaylistError("Liste silinemedi.");
     } finally {
@@ -362,16 +362,7 @@ export function Room({
           <div className="host-controls">
             <div className="transport-card compact player-transport-panel">
               <div className="player-transport-header">
-                <div className="now-playing-artwork">
-                  <Artwork
-                    className="now-playing-cover"
-                    src={playback?.thumbnailUrl}
-                    fallback={currentTrackLabel}
-                  />
-                </div>
-                <div className="player-transport-copy">
-                  <strong>{currentTrackLabel}</strong>
-                </div>
+                {/* artwork and large current-track label removed per request */}
               </div>
 
               <div className="track-neighbors-inline">
@@ -383,6 +374,17 @@ export function Room({
                   />
                   <div className="neighbor-copy">
                     <strong>{previousTrack?.title || previousTrack?.videoId || "Yok"}</strong>
+                  </div>
+                </div>
+                <span className="neighbor-divider" aria-hidden="true">|</span>
+                <div className="current-track-inline">
+                  <Artwork
+                    className="mini-neighbor-cover playing"
+                    src={playback?.thumbnailUrl}
+                    fallback={currentTrackLabel}
+                  />
+                  <div className="neighbor-copy">
+                    <strong>{currentTrackLabel}</strong>
                   </div>
                 </div>
                 <span className="neighbor-divider" aria-hidden="true">|</span>
@@ -507,19 +509,19 @@ export function Room({
               {isHost ? (
                 <button
                   type="button"
-                  className="pill-action"
+                  className={`panel-action-pill${showPlaylistForm ? " panel-action-pill--on" : ""}`}
                   onClick={() => setShowPlaylistForm((current) => !current)}
                 >
-                  <PlusGlyph />
-                  {showPlaylistForm ? "Kapat" : "Yeni liste"}
+                  {showPlaylistForm ? <CloseGlyph /> : <PlusGlyph />}
+                  {showPlaylistForm ? "Kapat" : "Yeni"}
                 </button>
               ) : (
-                <span>{playlists.length} liste</span>
+                <span className="panel-count-pill">{playlists.length} liste</span>
               )}
             </div>
 
             {isHost && showPlaylistForm ? (
-              <form className="queue-form sidebar-form-card" onSubmit={submitPlaylist}>
+              <form className="pf-form" onSubmit={submitPlaylist}>
                 <label htmlFor="playlist-name">Liste adı</label>
                 <input
                   id="playlist-name"
@@ -527,75 +529,96 @@ export function Room({
                   placeholder="liste1"
                   onChange={(event) => setPlaylistName(event.target.value)}
                 />
-                <label htmlFor="queue-links">Liste linkleri</label>
+                <label htmlFor="queue-links">Linkler</label>
                 <textarea
                   id="queue-links"
                   value={queueDraft}
-                  rows={4}
+                  rows={3}
                   placeholder={"https://music.youtube.com/watch?v=...\nhttps://music.youtube.com/watch?v=..."}
                   onChange={(event) => setQueueDraft(event.target.value)}
                 />
-                <div className="queue-form-actions">
-                  <button type="submit" disabled={playlistBusy}>Listeyi kaydet</button>
-                  <button
-                    type="button"
-                    className="ghost-button"
-                    disabled={playlistBusy || extractMusicUrls(queueDraft).length === 0}
-                    onClick={() => onReplaceQueueTracks(extractMusicUrls(queueDraft))}
-                  >
-                    Odaya yükle
+                <div className="pf-actions">
+                  <button type="submit" className="pf-save" disabled={playlistBusy}>
+                    Kaydet
                   </button>
                 </div>
                 {playlistError ? <p className="error-message" role="alert">{playlistError}</p> : null}
               </form>
             ) : null}
 
-            <div className="saved-tracks-block">
-              <ul className="saved-tracks-list playlist-list">
-                {playlists.length > 0 ? (
-                  playlists.map((playlist, index) => (
-                    <li className={playlist.id === selectedPlaylistId ? "selected" : ""} key={playlist.id}>
-                      <Artwork
-                        className={`playlist-cover cover-${index % 4}`}
-                        src={playlist.tracks[0]?.thumbnailUrl}
-                        fallback={playlist.name}
-                      />
-                      <div className="playlist-item-copy">
-                        <div className="playlist-item-topline">
-                          <strong>{playlist.name}</strong>
-                          <small className="playlist-count-badge">
-                            <SidebarGlyph kind="note" />
-                            {playlist.tracks.length}
-                          </small>
+            <ul className="pl-list">
+              {playlists.length > 0 ? (
+                playlists.map((playlist, index) => (
+                  <li
+                    key={playlist.id}
+                    className={`pl-item${playlist.id === selectedPlaylistId ? " pl-item--sel" : ""}`}
+                  >
+                    <Artwork
+                      className={`pl-thumb cover-${index % 4}`}
+                      src={playlist.tracks[0]?.thumbnailUrl}
+                      fallback={playlist.name}
+                    />
+                    <div className="pl-info">
+                      <strong>{playlist.name}</strong>
+                      <small>
+                        {playlist.tracks.length} şarkı · {formatRelativeDate(playlist.updatedAt)}
+                      </small>
+                    </div>
+                    <div className="pl-btns">
+                      {confirmDeleteId === playlist.id ? (
+                        <div className="pl-confirm">
+                          <button
+                            type="button"
+                            className="pl-del-confirm"
+                            disabled={playlistBusy}
+                            onClick={() => void removePlaylist(playlist.id)}
+                          >
+                            Sil
+                          </button>
+                          <button
+                            type="button"
+                            className="icon-menu-button"
+                            onClick={() => setConfirmDeleteId(null)}
+                            aria-label="İptal"
+                          >
+                            <CloseGlyph />
+                          </button>
                         </div>
-                        <small>Son güncelleme: {formatRelativeDate(playlist.updatedAt)}</small>
-                      </div>
-                      <div className="saved-track-actions">
-                        <button
-                          type="button"
-                          className="icon-menu-button"
-                          onClick={() => applyPlaylist(playlist)}
-                          title="Listeyi oda sırasına yükle"
-                          aria-label={`${playlist.name} listesini seç`}
-                        >
-                          <PlayMiniGlyph />
-                        </button>
-                        <button
-                          type="button"
-                          className="ghost-button danger compact-danger"
-                          disabled={playlistBusy}
-                          onClick={() => void removePlaylist(playlist.id)}
-                        >
-                          Sil
-                        </button>
-                      </div>
-                    </li>
-                  ))
-                ) : (
-                  <li className="saved-empty">{playlistBusy ? "Yukleniyor..." : "Kayitli liste yok."}</li>
-                )}
-              </ul>
-            </div>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            className="icon-menu-button pl-play"
+                            onClick={() => applyPlaylist(playlist)}
+                            title="Listeyi oda sırasına yükle"
+                            aria-label={`${playlist.name} listesini oynat`}
+                          >
+                            <PlayMiniGlyph />
+                          </button>
+                          {isHost ? (
+                            <button
+                              type="button"
+                              className="icon-menu-button pl-del"
+                              disabled={playlistBusy}
+                              onClick={() => setConfirmDeleteId(playlist.id)}
+                              title="Sil"
+                              aria-label={`${playlist.name} listesini sil`}
+                            >
+                              <CloseGlyph />
+                            </button>
+                          ) : null}
+                        </>
+                      )}
+                    </div>
+                  </li>
+                ))
+              ) : (
+                <li className="pl-empty">
+                  {playlistBusy ? "Yükleniyor…" : "Kayıtlı liste yok."}
+                </li>
+              )}
+            </ul>
+
             <button
               type="button"
               className="show-all-button"
@@ -604,7 +627,7 @@ export function Room({
                 setShowPlaylistOverlay(true);
               }}
             >
-              Tüm listeleri göster
+              Tüm listeler
               <ChevronGlyph />
             </button>
           </section>
@@ -688,20 +711,6 @@ export function Room({
                 <li className="queue-empty">Sıraya link eklenmedi.</li>
               )}
             </ol>
-
-            <form className="quick-add-form" onSubmit={submitQueueLink}>
-              <input
-                type="url"
-                value={queueLinkDraft}
-                placeholder="Sıraya şarkı ekle"
-                disabled={!isHost}
-                onChange={(event) => setQueueLinkDraft(event.target.value)}
-              />
-              <button type="submit" disabled={!isHost || !queueLinkDraft.trim()} aria-label="Sıraya ekle">
-                <PlusGlyph />
-              </button>
-              {queueLinkError ? <p className="error-message" role="alert">{queueLinkError}</p> : null}
-            </form>
           </section>
 
           <form className="sidebar-link-bar sidebar-card" onSubmit={submitQueueLink}>
