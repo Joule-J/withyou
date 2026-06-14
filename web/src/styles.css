@@ -1771,6 +1771,8 @@ label {
   position: relative;
   overflow: hidden;
   align-items: center;
+  margin-bottom: 0.6rem; /* ensure consistent spacing between items even if flex gap isn't applied */
+  z-index: 0; /* baseline stacking so shadows don't overlap unpredictably */
 }
 
 .pl-item::before {
@@ -1791,7 +1793,11 @@ label {
 
 .pl-item--sel {
   background: rgba(255, 240, 246, 0.9);
+  z-index: 1; /* bring selected item above neighbors */
 }
+
+/* Defensive: ensure adjacent items don't collapse visually */
+.pl-list > .pl-item:last-child { margin-bottom: 0; }
 
 .pl-thumb,
 .queue-cover {
