@@ -158,7 +158,7 @@ export class RoomStore {
     return room.playback;
   }
 
-  async addQueueTracks(code: string, participantId: string, musicUrls: string[]): Promise<void> {
+  async addQueueTracks(code: string, participantId: string, musicUrls: string[], insertAfterId?: string): Promise<void> {
     const room = this.requireRoom(code);
     const participant = this.requireHost(room, participantId);
     const tracks = await Promise.all(musicUrls.map(async (musicUrl): Promise<QueueTrack> => {
@@ -176,6 +176,14 @@ export class RoomStore {
         addedAt: this.now(),
       };
     }));
+
+    if (insertAfterId) {
+      const index = room.queue.findIndex((t) => t.id === insertAfterId);
+      if (index !== -1) {
+        room.queue.splice(index + 1, 0, ...tracks);
+        return;
+      }
+    }
 
     room.queue.push(...tracks);
   }

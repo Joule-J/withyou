@@ -1,7 +1,8 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { PlayerCommand, RoomSnapshot } from "../types";
 import type { YouTubePlayerHandle } from "./youtube-player";
 import { YouTubePlayer } from "./youtube-player";
+import { POST_ACTION_SETTLE_MS, canCorrectDrift, shouldCorrectDrift, targetPosition } from "../lib/sync";
 
 type Props = {
   snapshot: RoomSnapshot;
@@ -33,8 +34,44 @@ export function MobileRoom({
 }: Props) {
   const [showPlaylists, setShowPlaylists] = useState(false);
   const [showQueue, setShowQueue] = useState(true);
+  const [playerReady, setPlayerReady] = useState(false);
+  const [playerError, setPlayerError] = useState<string | null>(null);
   const playback = snapshot.playback;
   const isHost = snapshot.hostParticipantId === participantId;
+  const playerRef = useRef<YouTubePlayerHandle>(null);
+  const settleUntilRef = useRef(0);
+
+  useEffect(() => {
+    const player = playerRef.current;
+    if (!playerReady || !player || !playback) return;
+
+    const now = Date.now();
+    if (now < settleUntilRef.current) return;
+
+    const target = targetPosition(playback, serverNow());
+    const playerState = player.state();
+    const currentVideoId = player.videoId();
+    const currentPosition = player.currentTime();
+
+    if (currentVideoId !== playback.videoId) {
+      player.load(playback.videoId, target, playback.isPlaying);
+      settleUntilRef.current = now + POST_ACTION_SETTLE_MS;
+      return;
+    }
+
+    if (canCorrectDrift(playerState) && shouldCorrectDrift(currentPosition, target)) {
+      player.seek(target);
+      settleUntilRef.current = now + POST_ACTION_SETTLE_MS;
+    }
+
+    if (playback.isPlaying && playerState !== 1) {
+      player.play();
+    }
+
+    if (!playback.isPlaying && playerState !== 2) {
+      player.pause();
+    }
+  }, [playback, playerReady, serverNow]);
 
   const playPause = useCallback(() => {
     if (!playback) return;
@@ -71,7 +108,12 @@ export function MobileRoom({
       <main className="mobile-main">
         <div className="mobile-player">
           {playback ? (
-            <YouTubePlayer onReady={() => {}} onError={() => {}} onEnded={() => { if (isHost) onAdvanceQueue(); }} />
+            <YouTubePlayer
+              ref={playerRef}
+              onReady={() => setPlayerReady(true)}
+              onError={(message) => setPlayerError(message)}
+              onEnded={() => { if (isHost) onAdvanceQueue(); }}
+            />
           ) : (
             <div className="mobile-empty">Şarkı bekleniyor</div>
           )}
@@ -133,6 +175,8 @@ export function MobileRoom({
             </ol>
           </section>
         ) : null}
+
+        {playerError ? <p className="mobile-error" role="alert">{playerError}</p> : null}
       </main>
     </div>
   );

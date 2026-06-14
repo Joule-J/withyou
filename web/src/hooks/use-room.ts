@@ -112,8 +112,8 @@ export function useRoom(initialRoomCode: string | null) {
     socketRef.current?.emit("player:command", command);
   }, []);
 
-  const addQueueTracks = useCallback((musicUrls: string[]) => {
-    socketRef.current?.emit("queue:add", { musicUrls });
+  const addQueueTracks = useCallback((musicUrls: string[], insertAfterId?: string) => {
+    socketRef.current?.emit("queue:add", { musicUrls, insertAfterId });
   }, []);
 
   const replaceQueueTracks = useCallback((musicUrls: string[]) => {

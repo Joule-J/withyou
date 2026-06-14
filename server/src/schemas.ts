@@ -56,6 +56,7 @@ export const clockPingSchema = z.object({
 
 export const queueAddSchema = z.object({
   musicUrls: z.array(z.string().url()).min(1).max(20),
+  insertAfterId: z.string().uuid().optional(),
 });
 
 export const queueReorderSchema = z.object({
