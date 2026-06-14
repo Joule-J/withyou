@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { InMemoryPlaylistRepository } from "../src/playlist-repository.js";
+import { describe, expect, it, vi } from "vitest";
+import { InMemoryPlaylistRepository, PrismaPlaylistRepository } from "../src/playlist-repository.js";
 
 describe("InMemoryPlaylistRepository", () => {
   it("preserves playlist track thumbnails when saving and listing", async () => {
@@ -28,5 +28,59 @@ describe("InMemoryPlaylistRepository", () => {
         ],
       },
     ]);
+  });
+});
+
+describe("PrismaPlaylistRepository", () => {
+  it("waits for the first DB load instead of returning an empty cache", async () => {
+    vi.useFakeTimers();
+    const repository = new PrismaPlaylistRepository({
+      playlist: {
+        findMany: () =>
+          new Promise((resolve) => {
+            setTimeout(() => {
+              resolve([
+                {
+                  id: "playlist-1",
+                  name: "Roadtrip",
+                  updatedAt: new Date("2026-06-14T12:00:00Z"),
+                  tracks: [
+                    {
+                      id: "track-1",
+                      title: "Song A",
+                      videoId: "dQw4w9WgXcQ",
+                      musicUrl: "https://music.youtube.com/watch?v=dQw4w9WgXcQ",
+                      thumbnailUrl: null,
+                      position: 0,
+                    },
+                  ],
+                },
+              ]);
+            }, 900);
+          }),
+      },
+    } as never);
+
+    const listPromise = repository.list();
+    await vi.advanceTimersByTimeAsync(900);
+    await expect(listPromise).resolves.toEqual([
+      {
+        id: "playlist-1",
+        name: "Roadtrip",
+        updatedAt: "2026-06-14T12:00:00.000Z",
+        tracks: [
+          {
+            id: "track-1",
+            title: "Song A",
+            videoId: "dQw4w9WgXcQ",
+            musicUrl: "https://music.youtube.com/watch?v=dQw4w9WgXcQ",
+            thumbnailUrl: undefined,
+            position: 0,
+          },
+        ],
+      },
+    ]);
+
+    vi.useRealTimers();
   });
 });

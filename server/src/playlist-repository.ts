@@ -92,11 +92,11 @@ export class PrismaPlaylistRepository implements PlaylistRepository {
 
   async list(): Promise<PlaylistRecord[]> {
     if (this.cache.length > 0) {
-      void this.refreshCache();
+      void this.refreshCache(true);
       return this.cache;
     }
 
-    return this.refreshCache();
+    return this.refreshCache(false);
   }
 
   async save(input: PlaylistDraft): Promise<PlaylistRecord> {
@@ -201,7 +201,7 @@ export class PrismaPlaylistRepository implements PlaylistRepository {
     return record;
   }
 
-  private async refreshCache(): Promise<PlaylistRecord[]> {
+  private async refreshCache(allowFallback: boolean): Promise<PlaylistRecord[]> {
     const mappedPromise = this.prisma.playlist
       .findMany({
         include: {
@@ -227,7 +227,7 @@ export class PrismaPlaylistRepository implements PlaylistRepository {
         })),
       );
 
-    this.cache = await withTimeout(mappedPromise, 800, this.cache);
+    this.cache = allowFallback ? await withTimeout(mappedPromise, 800, this.cache) : await mappedPromise;
     return this.cache;
   }
 }
