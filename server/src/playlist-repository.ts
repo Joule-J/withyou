@@ -5,6 +5,7 @@ export type PlaylistTrackRecord = {
   title: string;
   videoId: string;
   musicUrl: string;
+  thumbnailUrl?: string;
   position: number;
 };
 
@@ -21,13 +22,19 @@ export type PlaylistDraft = {
     title: string;
     videoId: string;
     musicUrl: string;
+    thumbnailUrl?: string;
   }>;
 };
 
 export interface PlaylistRepository {
   list(): Promise<PlaylistRecord[]>;
   save(input: PlaylistDraft): Promise<PlaylistRecord>;
+  reorder(playlistId: string, orderedMusicUrls: string[]): Promise<PlaylistRecord>;
   delete(playlistId: string): Promise<void>;
+}
+
+export function playlistPersistenceMode(env: NodeJS.ProcessEnv = process.env): "supabase-postgres" | "in-memory" {
+  return env.DATABASE_URL ? "supabase-postgres" : "in-memory";
 }
 
 export class InMemoryPlaylistRepository implements PlaylistRepository {
@@ -48,6 +55,7 @@ export class InMemoryPlaylistRepository implements PlaylistRepository {
         title: track.title,
         videoId: track.videoId,
         musicUrl: track.musicUrl,
+        thumbnailUrl: track.thumbnailUrl,
         position: index,
       })),
     };
@@ -57,6 +65,23 @@ export class InMemoryPlaylistRepository implements PlaylistRepository {
 
   async delete(playlistId: string): Promise<void> {
     this.playlists.delete(playlistId);
+  }
+
+  async reorder(playlistId: string, orderedMusicUrls: string[]): Promise<PlaylistRecord> {
+    const playlist = this.playlists.get(playlistId);
+    if (!playlist) throw new Error("PLAYLIST_NOT_FOUND");
+    const byUrl = new Map(playlist.tracks.map((track) => [track.musicUrl, track]));
+    if (orderedMusicUrls.length !== playlist.tracks.length) throw new Error("INVALID_PLAYLIST_ORDER");
+
+    const tracks = orderedMusicUrls.map((musicUrl, index) => {
+      const track = byUrl.get(musicUrl);
+      if (!track) throw new Error("INVALID_PLAYLIST_ORDER");
+      return { ...track, position: index };
+    });
+
+    const next = { ...playlist, updatedAt: new Date().toISOString(), tracks };
+    this.playlists.set(playlistId, next);
+    return next;
   }
 }
 
@@ -84,6 +109,7 @@ export class PrismaPlaylistRepository implements PlaylistRepository {
             title: track.title,
             videoId: track.videoId,
             musicUrl: track.musicUrl,
+            thumbnailUrl: track.thumbnailUrl,
             position: index,
           })),
         },
@@ -95,6 +121,7 @@ export class PrismaPlaylistRepository implements PlaylistRepository {
             title: track.title,
             videoId: track.videoId,
             musicUrl: track.musicUrl,
+            thumbnailUrl: track.thumbnailUrl,
             position: index,
           })),
         },
@@ -115,6 +142,7 @@ export class PrismaPlaylistRepository implements PlaylistRepository {
         title: track.title,
         videoId: track.videoId,
         musicUrl: track.musicUrl,
+        thumbnailUrl: track.thumbnailUrl ?? undefined,
         position: track.position,
       })),
     };
@@ -125,6 +153,52 @@ export class PrismaPlaylistRepository implements PlaylistRepository {
   async delete(playlistId: string): Promise<void> {
     await this.prisma.playlist.delete({ where: { id: playlistId } });
     this.cache = this.cache.filter((playlist) => playlist.id !== playlistId);
+  }
+
+  async reorder(playlistId: string, orderedMusicUrls: string[]): Promise<PlaylistRecord> {
+    const playlist = await this.prisma.playlist.findUnique({
+      where: { id: playlistId },
+      include: { tracks: { orderBy: { position: "asc" } } },
+    });
+    if (!playlist) throw new Error("PLAYLIST_NOT_FOUND");
+    if (orderedMusicUrls.length !== playlist.tracks.length) throw new Error("INVALID_PLAYLIST_ORDER");
+
+    const byUrl = new Map(playlist.tracks.map((track) => [track.musicUrl, track]));
+    const updatedTracks = orderedMusicUrls.map((musicUrl, index) => {
+      const track = byUrl.get(musicUrl);
+      if (!track) throw new Error("INVALID_PLAYLIST_ORDER");
+      return { id: track.id, position: index };
+    });
+
+    await this.prisma.$transaction(
+      updatedTracks.map((track) =>
+        this.prisma.playlistTrack.update({
+          where: { id: track.id },
+          data: { position: track.position },
+        }),
+      ),
+    );
+
+    const refreshed = await this.prisma.playlist.findUniqueOrThrow({
+      where: { id: playlistId },
+      include: { tracks: { orderBy: { position: "asc" } } },
+    });
+
+    const record = {
+      id: refreshed.id,
+      name: refreshed.name,
+      updatedAt: refreshed.updatedAt.toISOString(),
+      tracks: refreshed.tracks.map((track) => ({
+        id: track.id,
+        title: track.title,
+        videoId: track.videoId,
+        musicUrl: track.musicUrl,
+        thumbnailUrl: track.thumbnailUrl ?? undefined,
+        position: track.position,
+      })),
+    };
+    this.cache = [record, ...this.cache.filter((item) => item.id !== record.id)];
+    return record;
   }
 
   private async refreshCache(): Promise<PlaylistRecord[]> {
@@ -147,6 +221,7 @@ export class PrismaPlaylistRepository implements PlaylistRepository {
             title: track.title,
             videoId: track.videoId,
             musicUrl: track.musicUrl,
+            thumbnailUrl: track.thumbnailUrl ?? undefined,
             position: track.position,
           })),
         })),
@@ -160,7 +235,7 @@ export class PrismaPlaylistRepository implements PlaylistRepository {
 let prismaClient: PrismaClient | null = null;
 
 export function createPlaylistRepository(env: NodeJS.ProcessEnv = process.env): PlaylistRepository {
-  if (!env.DATABASE_URL) {
+  if (playlistPersistenceMode(env) === "in-memory") {
     return new InMemoryPlaylistRepository();
   }
 

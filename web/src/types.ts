@@ -3,6 +3,7 @@ export type PlaybackState = {
   videoId: string;
   musicUrl: string;
   title?: string;
+  thumbnailUrl?: string;
   isPlaying: boolean;
   positionSeconds: number;
   updatedAtServerMs: number;
@@ -39,5 +40,6 @@ export type QueueTrackView = {
   videoId: string;
   musicUrl: string;
   title?: string;
+  thumbnailUrl?: string;
   addedByName: string;
 };

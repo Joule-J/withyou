@@ -1,0 +1,30 @@
+<svg width="320" height="320" viewBox="0 0 320 320" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="320" y2="320" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF0F6" />
+      <stop offset="1" stop-color="#FFE9F2" />
+    </linearGradient>
+    <filter id="paper" x="-20%" y="-20%" width="140%" height="140%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" stitchTiles="stitch" />
+      <feColorMatrix type="saturate" values="0" />
+      <feComponentTransfer>
+        <feFuncA type="table" tableValues="0 0.05" />
+      </feComponentTransfer>
+    </filter>
+    <path id="heart" d="M8 14.2c-.8 0-1.5-.3-2-.9C2.6 10 .8 8 .8 5.6.8 3.5 2.4 2 4.5 2c1.2 0 2.4.6 3.1 1.5C8.4 2.6 9.6 2 10.8 2c2.1 0 3.7 1.5 3.7 3.6 0 2.4-1.8 4.4-5.2 7.7-.5.6-1.1.9-1.9.9Z" />
+  </defs>
+
+  <rect width="320" height="320" fill="url(#bg)" />
+  <rect width="320" height="320" fill="#fff" filter="url(#paper)" opacity="0.35" />
+
+  <g fill="#F78FBE">
+    <use href="#heart" transform="translate(40 40) scale(1.45)" />
+    <use href="#heart" transform="translate(160 28) scale(1.45)" />
+    <use href="#heart" transform="translate(265 72) scale(1.45)" />
+    <use href="#heart" transform="translate(78 136) scale(1.45)" />
+    <use href="#heart" transform="translate(212 118) scale(1.45)" />
+    <use href="#heart" transform="translate(24 232) scale(1.45)" />
+    <use href="#heart" transform="translate(154 222) scale(1.45)" />
+    <use href="#heart" transform="translate(274 260) scale(1.45)" />
+  </g>
+</svg>

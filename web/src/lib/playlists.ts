@@ -3,6 +3,7 @@ export type PlaylistTrack = {
   title: string;
   videoId: string;
   musicUrl: string;
+  thumbnailUrl?: string;
   position: number;
 };
 
@@ -40,4 +41,15 @@ export async function deletePlaylist(playlistId: string): Promise<void> {
     method: "DELETE",
   });
   if (!response.ok) throw new Error("PLAYLIST_DELETE_FAILED");
+}
+
+export async function reorderPlaylist(playlistId: string, musicUrls: string[]): Promise<Playlist> {
+  const response = await fetch(`/api/playlists/${playlistId}/reorder`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ musicUrls }),
+  });
+  if (!response.ok) throw new Error("PLAYLIST_REORDER_FAILED");
+  const payload = (await response.json()) as { playlist: Playlist };
+  return payload.playlist;
 }

@@ -128,6 +128,10 @@ export function useRoom(initialRoomCode: string | null) {
     socketRef.current?.emit("queue:previous");
   }, []);
 
+  const reorderQueue = useCallback((orderedTrackIds: string[]) => {
+    socketRef.current?.emit("queue:reorder", { orderedTrackIds });
+  }, []);
+
   const serverNow = useCallback(() => Date.now() + serverOffsetMs, [serverOffsetMs]);
 
   const leaveRoom = useCallback(() => {
@@ -153,6 +157,7 @@ export function useRoom(initialRoomCode: string | null) {
     sendPlayerCommand,
     addQueueTracks,
     replaceQueueTracks,
+    reorderQueue,
     advanceQueue,
     previousQueue,
     leaveRoom,

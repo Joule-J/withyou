@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { RoomStore, StoreError } from "../src/room-store.js";
+import type { TrackMetadata } from "../src/track-metadata.js";
 
 function createStore(
   options: {
@@ -7,6 +8,7 @@ function createStore(
     now?: () => number;
     codes?: string[];
     resolveTrackTitle?: (videoId: string) => Promise<string | null>;
+    resolveTrackMetadata?: (videoId: string) => Promise<TrackMetadata>;
   } = {},
 ) {
   const codes = options.codes ?? ["ABC123"];
@@ -17,6 +19,7 @@ function createStore(
     now: options.now,
     codeGenerator: () => codes[Math.min(index++, codes.length - 1)],
     resolveTrackTitle: options.resolveTrackTitle,
+    resolveTrackMetadata: options.resolveTrackMetadata,
   });
 }
 
@@ -121,6 +124,29 @@ describe("RoomStore", () => {
     expect(store.snapshot(room).queue[0]?.title).toBe("Title y8MArfXrn80");
   });
 
+  it("stores resolved thumbnails for playback and queue snapshots", async () => {
+    const store = createStore({
+      resolveTrackMetadata: async (videoId) => ({
+        title: `Title ${videoId}`,
+        thumbnailUrl: `https://img.example/${videoId}.jpg`,
+      }),
+    });
+    const { room, participant: host } = store.createRoom("Host", "socket-1");
+
+    await store.applyPlayerCommand(room.code, host.id, {
+      type: "change_track",
+      videoId: "dQw4w9WgXcQ",
+      musicUrl: "https://music.youtube.com/watch?v=dQw4w9WgXcQ",
+      positionSeconds: 0,
+      clientCommandId: "command-1",
+      isPlaying: true,
+    });
+    await store.addQueueTracks(room.code, host.id, ["https://music.youtube.com/watch?v=y8MArfXrn80"]);
+
+    expect(room.playback?.thumbnailUrl).toBe("https://img.example/dQw4w9WgXcQ.jpg");
+    expect(store.snapshot(room).queue[0]?.thumbnailUrl).toBe("https://img.example/y8MArfXrn80.jpg");
+  });
+
   it("adds queue tracks and loops through them", async () => {
     const store = createStore();
     const { room, participant: host } = store.createRoom("Host", "socket-1");
@@ -135,5 +161,32 @@ describe("RoomStore", () => {
     expect(store.advanceQueue(room.code, host.id)?.videoId).toBe("y8MArfXrn80");
     expect(store.advanceQueue(room.code, host.id)?.videoId).toBe("dQw4w9WgXcQ");
     expect(store.previousQueue(room.code, host.id)?.videoId).toBe("y8MArfXrn80");
+  });
+
+  it("reorders queue tracks", async () => {
+    const store = createStore();
+    const { room, participant: host } = store.createRoom("Host", "socket-1");
+    await store.addQueueTracks(room.code, host.id, [
+      "https://music.youtube.com/watch?v=dQw4w9WgXcQ",
+      "https://music.youtube.com/watch?v=y8MArfXrn80",
+    ]);
+
+    const before = store.snapshot(room).queue;
+    store.reorderQueue(room.code, host.id, [before[1].id, before[0].id]);
+
+    expect(store.snapshot(room).queue.map((track) => track.videoId)).toEqual(["y8MArfXrn80", "dQw4w9WgXcQ"]);
+  });
+
+  it("autoplays the first queue track after replacing an empty room queue", async () => {
+    const store = createStore();
+    const { room, participant: host } = store.createRoom("Host", "socket-1");
+
+    await store.replaceQueueTracks(room.code, host.id, [
+      "https://music.youtube.com/watch?v=dQw4w9WgXcQ",
+      "https://music.youtube.com/watch?v=y8MArfXrn80",
+    ]);
+
+    expect(room.playback?.videoId).toBe("dQw4w9WgXcQ");
+    expect(room.activeQueueItemId).toBe(room.queue[0]?.id);
   });
 });

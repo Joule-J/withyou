@@ -5,6 +5,7 @@ export type PlaybackState = {
   videoId: string;
   musicUrl: string;
   title?: string;
+  thumbnailUrl?: string;
   isPlaying: boolean;
   positionSeconds: number;
   updatedAtServerMs: number;
@@ -60,6 +61,7 @@ export type QueueTrack = {
   videoId: string;
   musicUrl: string;
   title?: string;
+  thumbnailUrl?: string;
   addedByParticipantId: string;
   addedByName: string;
   addedAt: number;
@@ -70,5 +72,10 @@ export type QueueTrackView = {
   videoId: string;
   musicUrl: string;
   title?: string;
+  thumbnailUrl?: string;
   addedByName: string;
+};
+
+export type QueueReorderInput = {
+  orderedTrackIds: string[];
 };

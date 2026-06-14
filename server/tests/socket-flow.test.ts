@@ -124,6 +124,42 @@ describe("Socket.IO room flow", () => {
       videoId: "y8MArfXrn80",
     });
   });
+
+  it("reorders queue tracks and broadcasts the snapshot", async () => {
+    const app = createApp({
+      port: 0,
+      roomCapacity: 10,
+      reconnectGraceMs: 20,
+      roomCodeLength: 6,
+      allowedOrigins: ["http://localhost:*"],
+      webDistDir: "../web/dist",
+    });
+    servers.push(app);
+    await new Promise<void>((resolve) => app.httpServer.listen(0, resolve));
+    const port = (app.httpServer.address() as AddressInfo).port;
+
+    const host = connect(port);
+    sockets.push(host);
+    await waitFor(host, "connect");
+
+    host.emit("room:create", { nickname: "Host" });
+    await waitFor(host, "room:joined");
+
+    host.emit("queue:add", {
+      musicUrls: [
+        "https://music.youtube.com/watch?v=dQw4w9WgXcQ",
+        "https://music.youtube.com/watch?v=y8MArfXrn80",
+      ],
+    });
+    const initial = await waitFor<{ queue: Array<{ id: string; videoId: string }> }>(host, "room:snapshot");
+
+    const reorderedSnapshot = waitFor<{ queue: Array<{ videoId: string }> }>(host, "room:snapshot");
+    host.emit("queue:reorder", { orderedTrackIds: [initial.queue[1].id, initial.queue[0].id] });
+
+    await expect(reorderedSnapshot).resolves.toMatchObject({
+      queue: [{ videoId: "y8MArfXrn80" }, { videoId: "dQw4w9WgXcQ" }],
+    });
+  });
 });
 
 function connect(port: number): Socket {

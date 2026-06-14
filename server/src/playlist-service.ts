@@ -1,6 +1,6 @@
 import type { PlaylistRecord, PlaylistRepository } from "./playlist-repository.js";
 import { parseMusicUrl } from "./schemas.js";
-import { resolveTrackTitle } from "./track-metadata.js";
+import { resolveTrackMetadata } from "./track-metadata.js";
 
 export class PlaylistService {
   constructor(private readonly repository: PlaylistRepository) {}
@@ -24,8 +24,10 @@ export class PlaylistService {
       uniqueUrls.map(async (musicUrl) => {
         const parsed = parseMusicUrl(musicUrl);
         if (!parsed) throw new Error("INVALID_MUSIC_URL");
+        const metadata = await resolveTrackMetadata(parsed.videoId);
         return {
-          title: (await resolveTrackTitle(parsed.videoId)) ?? parsed.videoId,
+          title: metadata.title ?? parsed.videoId,
+          thumbnailUrl: metadata.thumbnailUrl,
           videoId: parsed.videoId,
           musicUrl: parsed.normalizedUrl,
         };
@@ -36,6 +38,10 @@ export class PlaylistService {
       name: normalizedName,
       tracks,
     });
+  }
+
+  reorderPlaylist(playlistId: string, orderedMusicUrls: string[]): Promise<PlaylistRecord> {
+    return this.repository.reorder(playlistId, orderedMusicUrls);
   }
 
   deletePlaylist(playlistId: string): Promise<void> {

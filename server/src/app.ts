@@ -6,7 +6,7 @@ import express from "express";
 import { Server, type Socket } from "socket.io";
 import type { Config } from "./config.js";
 import { originAllowed } from "./config.js";
-import { createPlaylistRepository } from "./playlist-repository.js";
+import { createPlaylistRepository, playlistPersistenceMode } from "./playlist-repository.js";
 import { PlaylistService } from "./playlist-service.js";
 import { FixedWindowRateLimiter } from "./rate-limit.js";
 import { RoomStore, StoreError } from "./room-store.js";
@@ -18,6 +18,7 @@ import {
   playerCommandSchema,
   playlistSaveSchema,
   queueAddSchema,
+  queueReorderSchema,
   reconnectRoomSchema,
   stateReportSchema,
 } from "./schemas.js";
@@ -39,7 +40,11 @@ export function createApp(config: Config): AppInstance {
   app.use(express.json());
   const playlistService = new PlaylistService(createPlaylistRepository());
   app.get("/health", (_request, response) => {
-    response.json({ ok: true, rooms: store.rooms.size });
+    response.json({
+      ok: true,
+      rooms: store.rooms.size,
+      playlistPersistence: playlistPersistenceMode(),
+    });
   });
   app.get("/api/playlists", async (_request, response) => {
     response.json({ playlists: await playlistService.listPlaylists() });
@@ -55,6 +60,19 @@ export function createApp(config: Config): AppInstance {
       response.json({ playlist });
     } catch (error) {
       response.status(400).json({ message: mapPlaylistError(error) });
+    }
+  });
+  app.post("/api/playlists/:playlistId/reorder", async (request, response) => {
+    const parsed = queueAddSchema.safeParse({ musicUrls: request.body?.musicUrls });
+    if (!parsed.success) {
+      response.status(400).json({ message: "Gecersiz sira verisi." });
+      return;
+    }
+    try {
+      const playlist = await playlistService.reorderPlaylist(request.params.playlistId, parsed.data.musicUrls);
+      response.json({ playlist });
+    } catch {
+      response.status(400).json({ message: "Liste sirasi guncellenemedi." });
     }
   });
   app.delete("/api/playlists/:playlistId", async (request, response) => {
@@ -193,6 +211,16 @@ export function createApp(config: Config): AppInstance {
       void handle(socket, queueAddSchema, payload, async (data) => {
         const session = requireSession(socket);
         await store.replaceQueueTracks(session.roomCode, session.participantId, data.musicUrls);
+        const room = store.rooms.get(session.roomCode);
+        if (!room) throw new RequestError("ROOM_NOT_FOUND", "Oda bulunamadi.");
+        io.to(session.roomCode).emit("room:snapshot", store.snapshot(room));
+      });
+    });
+
+    socket.on("queue:reorder", (payload) => {
+      void handle(socket, queueReorderSchema, payload, async (data) => {
+        const session = requireSession(socket);
+        store.reorderQueue(session.roomCode, session.participantId, data.orderedTrackIds);
         const room = store.rooms.get(session.roomCode);
         if (!room) throw new RequestError("ROOM_NOT_FOUND", "Oda bulunamadi.");
         io.to(session.roomCode).emit("room:snapshot", store.snapshot(room));
