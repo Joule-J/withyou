@@ -154,7 +154,11 @@ export class RoomStore {
       positionSeconds: command.positionSeconds,
       updatedAtServerMs: this.now(),
     };
-    if (command.type === "change_track") room.activeQueueItemId = null;
+    if (command.type === "change_track") {
+      room.activeQueueItemId =
+        room.queue.find((track) => track.videoId === parsedUrl.videoId && track.musicUrl === parsedUrl.normalizedUrl)?.id ??
+        null;
+    }
     return room.playback;
   }
 
@@ -188,16 +192,13 @@ export class RoomStore {
     room.queue.push(...tracks);
   }
 
-  async replaceQueueTracks(code: string, participantId: string, musicUrls: string[]): Promise<void> {
+  async replaceQueueTracks(code: string, participantId: string, musicUrls: string[]): Promise<PlaybackState | null> {
     const room = this.requireRoom(code);
     this.requireHost(room, participantId);
-    const shouldAutoplayFirstTrack = room.playback === null;
     room.queue = [];
     room.activeQueueItemId = null;
     await this.addQueueTracks(code, participantId, musicUrls);
-    if (shouldAutoplayFirstTrack && room.queue.length > 0) {
-      this.playQueueTrack(room, room.queue[0]);
-    }
+    return room.queue.length > 0 ? this.playQueueTrack(room, room.queue[0]) : null;
   }
 
   reorderQueue(code: string, participantId: string, orderedTrackIds: string[]): void {

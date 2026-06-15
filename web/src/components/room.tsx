@@ -288,23 +288,7 @@ export function Room({
     setPlaylistName(playlist.name);
     setQueueDraft(playlist.tracks.map((track) => track.musicUrl).join("\n"));
     if (isHost) {
-      // If there is no current playback the server will autoplay the first
-      // track when replacing the queue. Only send an explicit play command
-      // when there is an active playback (to force a change).
-      const shouldLetServerAutoplay = !playback;
       onReplaceQueueTracks(playlist.tracks.map((track) => track.musicUrl));
-      if (!shouldLetServerAutoplay && playlist.tracks.length > 0) {
-        const first = playlist.tracks[0];
-        onCommand({
-          type: "change_track",
-          videoId: first.videoId,
-          musicUrl: first.musicUrl,
-          title: first.title,
-          positionSeconds: 0,
-          clientCommandId: crypto.randomUUID(),
-          isPlaying: true,
-        });
-      }
     }
   }
 

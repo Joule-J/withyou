@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseMusicUrl, playerCommandSchema } from "../src/schemas.js";
+import { parseMusicUrl, playerCommandSchema, queueAddSchema, queueReplaceSchema } from "../src/schemas.js";
 
 describe("YouTube Music validation", () => {
   it("normalizes a YouTube Music watch URL", () => {
@@ -20,5 +20,15 @@ describe("YouTube Music validation", () => {
         clientCommandId: "1",
       }).success,
     ).toBe(false);
+  });
+
+  it("allows saved playlists to be replayed with more tracks than a single queue add", () => {
+    const musicUrls = Array.from(
+      { length: 21 },
+      (_, index) => `https://music.youtube.com/watch?v=track${String(index).padStart(2, "0")}`,
+    );
+
+    expect(queueAddSchema.safeParse({ musicUrls }).success).toBe(false);
+    expect(queueReplaceSchema.safeParse({ musicUrls }).success).toBe(true);
   });
 });

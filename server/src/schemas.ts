@@ -59,8 +59,16 @@ export const queueAddSchema = z.object({
   insertAfterId: z.string().uuid().optional(),
 });
 
+export const queueReplaceSchema = z.object({
+  musicUrls: z.array(z.string().url()).min(1).max(100),
+});
+
 export const queueReorderSchema = z.object({
   orderedTrackIds: z.array(z.string().uuid()).min(1).max(100),
+});
+
+export const playlistReorderSchema = z.object({
+  musicUrls: z.array(z.string().url()).min(1).max(100),
 });
 
 export const playlistSaveSchema = z.object({

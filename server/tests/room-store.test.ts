@@ -181,12 +181,57 @@ describe("RoomStore", () => {
     const store = createStore();
     const { room, participant: host } = store.createRoom("Host", "socket-1");
 
-    await store.replaceQueueTracks(room.code, host.id, [
+    const playback = await store.replaceQueueTracks(room.code, host.id, [
       "https://music.youtube.com/watch?v=dQw4w9WgXcQ",
       "https://music.youtube.com/watch?v=y8MArfXrn80",
     ]);
 
+    expect(playback?.videoId).toBe("dQw4w9WgXcQ");
     expect(room.playback?.videoId).toBe("dQw4w9WgXcQ");
     expect(room.activeQueueItemId).toBe(room.queue[0]?.id);
+  });
+
+  it("starts the first replacement queue track even when another track is already playing", async () => {
+    const store = createStore();
+    const { room, participant: host } = store.createRoom("Host", "socket-1");
+
+    await store.applyPlayerCommand(room.code, host.id, {
+      type: "change_track",
+      videoId: "oldTrack",
+      musicUrl: "https://music.youtube.com/watch?v=oldTrack",
+      positionSeconds: 12,
+      clientCommandId: "command-1",
+      isPlaying: true,
+    });
+
+    const playback = await store.replaceQueueTracks(room.code, host.id, [
+      "https://music.youtube.com/watch?v=dQw4w9WgXcQ",
+      "https://music.youtube.com/watch?v=y8MArfXrn80",
+    ]);
+
+    expect(playback?.videoId).toBe("dQw4w9WgXcQ");
+    expect(playback?.positionSeconds).toBe(0);
+    expect(room.playback?.videoId).toBe("dQw4w9WgXcQ");
+    expect(room.activeQueueItemId).toBe(room.queue[0]?.id);
+  });
+
+  it("marks the matching queue item active when changing to a queued track", async () => {
+    const store = createStore();
+    const { room, participant: host } = store.createRoom("Host", "socket-1");
+    await store.addQueueTracks(room.code, host.id, [
+      "https://music.youtube.com/watch?v=dQw4w9WgXcQ",
+      "https://music.youtube.com/watch?v=y8MArfXrn80",
+    ]);
+
+    await store.applyPlayerCommand(room.code, host.id, {
+      type: "change_track",
+      videoId: "y8MArfXrn80",
+      musicUrl: "https://music.youtube.com/watch?v=y8MArfXrn80",
+      positionSeconds: 0,
+      clientCommandId: "command-1",
+      isPlaying: true,
+    });
+
+    expect(room.activeQueueItemId).toBe(room.queue[1]?.id);
   });
 });

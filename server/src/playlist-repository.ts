@@ -103,29 +103,29 @@ export class PrismaPlaylistRepository implements PlaylistRepository {
     const playlist = await this.prisma.playlist.upsert({
       where: { name: input.name },
       update: {
-        tracks: {
-          deleteMany: {},
-          create: input.tracks.map((track, index) => ({
-            title: track.title,
-            videoId: track.videoId,
-            musicUrl: track.musicUrl,
-            thumbnailUrl: track.thumbnailUrl,
-            position: index,
-          })),
-        },
+        updatedAt: new Date(),
       },
       create: {
         name: input.name,
-        tracks: {
-          create: input.tracks.map((track, index) => ({
-            title: track.title,
-            videoId: track.videoId,
-            musicUrl: track.musicUrl,
-            thumbnailUrl: track.thumbnailUrl,
-            position: index,
-          })),
-        },
       },
+    });
+
+    await this.prisma.$transaction([
+      this.prisma.playlistTrack.deleteMany({ where: { playlistId: playlist.id } }),
+      this.prisma.playlistTrack.createMany({
+        data: input.tracks.map((track, index) => ({
+          playlistId: playlist.id,
+          title: track.title,
+          videoId: track.videoId,
+          musicUrl: track.musicUrl,
+          thumbnailUrl: track.thumbnailUrl,
+          position: index,
+        })),
+      }),
+    ]);
+
+    const refreshed = await this.prisma.playlist.findUniqueOrThrow({
+      where: { id: playlist.id },
       include: {
         tracks: {
           orderBy: { position: "asc" },
@@ -133,19 +133,7 @@ export class PrismaPlaylistRepository implements PlaylistRepository {
       },
     });
 
-    const record = {
-      id: playlist.id,
-      name: playlist.name,
-      updatedAt: playlist.updatedAt.toISOString(),
-      tracks: playlist.tracks.map((track) => ({
-        id: track.id,
-        title: track.title,
-        videoId: track.videoId,
-        musicUrl: track.musicUrl,
-        thumbnailUrl: track.thumbnailUrl ?? undefined,
-        position: track.position,
-      })),
-    };
+    const record = this.toRecord(refreshed);
     this.cache = [record, ...this.cache.filter((item) => item.id !== record.id)];
     return record;
   }
@@ -170,33 +158,31 @@ export class PrismaPlaylistRepository implements PlaylistRepository {
       return { id: track.id, position: index };
     });
 
-    await this.prisma.$transaction(
-      updatedTracks.map((track) =>
+    await this.prisma.$transaction([
+      ...updatedTracks.map((track, index) =>
+        this.prisma.playlistTrack.update({
+          where: { id: track.id },
+          data: { position: -(index + 1) },
+        }),
+      ),
+      ...updatedTracks.map((track) =>
         this.prisma.playlistTrack.update({
           where: { id: track.id },
           data: { position: track.position },
         }),
       ),
-    );
+      this.prisma.playlist.update({
+        where: { id: playlistId },
+        data: { updatedAt: new Date() },
+      }),
+    ]);
 
     const refreshed = await this.prisma.playlist.findUniqueOrThrow({
       where: { id: playlistId },
       include: { tracks: { orderBy: { position: "asc" } } },
     });
 
-    const record = {
-      id: refreshed.id,
-      name: refreshed.name,
-      updatedAt: refreshed.updatedAt.toISOString(),
-      tracks: refreshed.tracks.map((track) => ({
-        id: track.id,
-        title: track.title,
-        videoId: track.videoId,
-        musicUrl: track.musicUrl,
-        thumbnailUrl: track.thumbnailUrl ?? undefined,
-        position: track.position,
-      })),
-    };
+    const record = this.toRecord(refreshed);
     this.cache = [record, ...this.cache.filter((item) => item.id !== record.id)];
     return record;
   }
@@ -211,24 +197,38 @@ export class PrismaPlaylistRepository implements PlaylistRepository {
         },
         orderBy: { updatedAt: "desc" },
       })
-      .then((playlists) =>
-        playlists.map((playlist) => ({
-          id: playlist.id,
-          name: playlist.name,
-          updatedAt: playlist.updatedAt.toISOString(),
-          tracks: playlist.tracks.map((track) => ({
-            id: track.id,
-            title: track.title,
-            videoId: track.videoId,
-            musicUrl: track.musicUrl,
-            thumbnailUrl: track.thumbnailUrl ?? undefined,
-            position: track.position,
-          })),
-        })),
-      );
+      .then((playlists) => playlists.map((playlist) => this.toRecord(playlist)));
 
     this.cache = allowFallback ? await withTimeout(mappedPromise, 800, this.cache) : await mappedPromise;
     return this.cache;
+  }
+
+  private toRecord(playlist: {
+    id: string;
+    name: string;
+    updatedAt: Date;
+    tracks: Array<{
+      id: string;
+      title: string;
+      videoId: string;
+      musicUrl: string;
+      thumbnailUrl: string | null;
+      position: number;
+    }>;
+  }): PlaylistRecord {
+    return {
+      id: playlist.id,
+      name: playlist.name,
+      updatedAt: playlist.updatedAt.toISOString(),
+      tracks: playlist.tracks.map((track) => ({
+        id: track.id,
+        title: track.title,
+        videoId: track.videoId,
+        musicUrl: track.musicUrl,
+        thumbnailUrl: track.thumbnailUrl ?? undefined,
+        position: track.position,
+      })),
+    };
   }
 }
 

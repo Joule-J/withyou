@@ -16,9 +16,11 @@ import {
   joinRoomSchema,
   leaveRoomSchema,
   playerCommandSchema,
+  playlistReorderSchema,
   playlistSaveSchema,
   queueAddSchema,
   queueReorderSchema,
+  queueReplaceSchema,
   reconnectRoomSchema,
   stateReportSchema,
 } from "./schemas.js";
@@ -89,7 +91,7 @@ export function createApp(config: Config): AppInstance {
     }
   });
   app.post("/api/playlists/:playlistId/reorder", async (request, response) => {
-    const parsed = queueAddSchema.safeParse({ musicUrls: request.body?.musicUrls });
+    const parsed = playlistReorderSchema.safeParse({ musicUrls: request.body?.musicUrls });
     if (!parsed.success) {
       response.status(400).json({ message: "Gecersiz sira verisi." });
       return;
@@ -238,12 +240,13 @@ export function createApp(config: Config): AppInstance {
     });
 
     socket.on("queue:replace", (payload) => {
-      void handle(socket, queueAddSchema, payload, async (data) => {
+      void handle(socket, queueReplaceSchema, payload, async (data) => {
         const session = requireSession(socket);
-        await store.replaceQueueTracks(session.roomCode, session.participantId, data.musicUrls);
+        const playback = await store.replaceQueueTracks(session.roomCode, session.participantId, data.musicUrls);
         const room = store.rooms.get(session.roomCode);
         if (!room) throw new RequestError("ROOM_NOT_FOUND", "Oda bulunamadi.");
         io.to(session.roomCode).emit("room:snapshot", store.snapshot(room));
+        if (playback) io.to(session.roomCode).emit("player:state", playback);
       });
     });
 
