@@ -79,11 +79,19 @@ export const playlistSaveSchema = z.object({
 export function parseMusicUrl(value: string): { videoId: string; normalizedUrl: string } | null {
   try {
     const url = new URL(value);
-    if (url.protocol !== "https:" || url.hostname !== "music.youtube.com" || url.pathname !== "/watch") {
-      return null;
+    if (url.protocol !== "https:") return null;
+
+    const host = url.hostname.toLowerCase();
+    let videoId: string | null = null;
+    if (
+      (host === "music.youtube.com" || host === "youtube.com" || host === "www.youtube.com" || host === "m.youtube.com") &&
+      url.pathname === "/watch"
+    ) {
+      videoId = url.searchParams.get("v");
+    } else if (host === "youtu.be") {
+      videoId = url.pathname.split("/").filter(Boolean)[0] ?? null;
     }
 
-    const videoId = url.searchParams.get("v");
     if (!videoId || !/^[A-Za-z0-9_-]{6,32}$/.test(videoId)) {
       return null;
     }

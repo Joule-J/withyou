@@ -164,7 +164,7 @@ export class RoomStore {
 
   async addQueueTracks(code: string, participantId: string, musicUrls: string[], insertAfterId?: string): Promise<void> {
     const room = this.requireRoom(code);
-    const participant = this.requireHost(room, participantId);
+    const participant = this.requireParticipant(room, participantId);
     const tracks = await Promise.all(musicUrls.map(async (musicUrl): Promise<QueueTrack> => {
       const parsed = parseMusicUrl(musicUrl);
       if (!parsed) throw new StoreError("INVALID_MUSIC_URL", "Gecersiz YouTube Music adresi.");
@@ -276,6 +276,10 @@ export class RoomStore {
     if (room.hostParticipantId !== participantId) {
       throw new StoreError("HOST_ONLY", "Bu islemi yalnizca host yapabilir.");
     }
+    return this.requireParticipant(room, participantId);
+  }
+
+  private requireParticipant(room: Room, participantId: string): Participant {
     const participant = room.participants.get(participantId);
     if (!participant) throw new StoreError("PARTICIPANT_NOT_FOUND", "Katilimci bulunamadi.");
     return participant;

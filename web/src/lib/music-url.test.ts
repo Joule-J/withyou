@@ -9,8 +9,19 @@ describe("parseMusicUrl", () => {
     });
   });
 
+  it("normalizes common YouTube share URLs to YouTube Music", () => {
+    expect(parseMusicUrl("https://www.youtube.com/watch?v=dQw4w9WgXcQ&si=share")).toEqual({
+      videoId: "dQw4w9WgXcQ",
+      normalizedUrl: "https://music.youtube.com/watch?v=dQw4w9WgXcQ",
+    });
+    expect(parseMusicUrl("https://youtu.be/dQw4w9WgXcQ?si=share")).toEqual({
+      videoId: "dQw4w9WgXcQ",
+      normalizedUrl: "https://music.youtube.com/watch?v=dQw4w9WgXcQ",
+    });
+  });
+
   it("rejects other hosts and invalid video ids", () => {
-    expect(parseMusicUrl("https://youtube.com/watch?v=dQw4w9WgXcQ")).toBeNull();
+    expect(parseMusicUrl("https://example.com/watch?v=dQw4w9WgXcQ")).toBeNull();
     expect(parseMusicUrl("https://music.youtube.com/watch?v=!")).toBeNull();
   });
 });

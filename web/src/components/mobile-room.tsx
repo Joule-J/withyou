@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { listPlaylists, type Playlist } from "../lib/playlists";
+import { parseMusicUrl } from "../lib/music-url";
 import type { PlayerCommand, RoomSnapshot } from "../types";
 import type { YouTubePlayerHandle } from "./youtube-player";
 import { YouTubePlayer } from "./youtube-player";
@@ -42,6 +43,8 @@ export function MobileRoom({
   const [playlistsError, setPlaylistsError] = useState<string | null>(null);
   const [showPlaylistOverlay, setShowPlaylistOverlay] = useState(false);
   const [soundUnlocked, setSoundUnlocked] = useState(false);
+  const [queueLinkDraft, setQueueLinkDraft] = useState("");
+  const [queueLinkError, setQueueLinkError] = useState<string | null>(null);
   const playback = snapshot.playback;
   const isHost = snapshot.hostParticipantId === participantId;
   const playerRef = useRef<YouTubePlayerHandle>(null);
@@ -319,6 +322,19 @@ export function MobileRoom({
     return () => window.clearInterval(interval);
   }, [playback]);
 
+  function submitQueueLink(event: FormEvent) {
+    event.preventDefault();
+    const parsed = parseMusicUrl(queueLinkDraft);
+    if (!parsed) {
+      setQueueLinkError("Geçerli bir YouTube veya YouTube Music şarkı linki gir.");
+      return;
+    }
+
+    setQueueLinkError(null);
+    onAddQueueTracks([parsed.normalizedUrl], snapshot.activeQueueItemId ?? undefined);
+    setQueueLinkDraft("");
+  }
+
   return (
     <div className="mobile-shell">
       <header className="mobile-header">
@@ -392,6 +408,16 @@ export function MobileRoom({
         {showQueue ? (
           <section className="mobile-panel mobile-queue">
             <h3>Kuyruk</h3>
+            <form className="mobile-queue-add" onSubmit={submitQueueLink}>
+              <input
+                type="url"
+                value={queueLinkDraft}
+                placeholder="YouTube Music linki ekle"
+                onChange={(event) => setQueueLinkDraft(event.target.value)}
+              />
+              <button type="submit" disabled={!queueLinkDraft.trim()}>Ekle</button>
+            </form>
+            {queueLinkError ? <p className="mobile-error" role="alert">{queueLinkError}</p> : null}
             <ol>
               {snapshot.queue.map((t) => (
                 <li key={t.id} className={`mobile-queue-item ${t.id === snapshot.activeQueueItemId ? "active" : ""}`}>

@@ -101,6 +101,30 @@
     margin: 0 0 0.7rem;
   }
 
+  .mobile-queue-add {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.55rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .mobile-queue-add input {
+    min-width: 0;
+    border: 1px solid rgba(36, 34, 36, 0.12);
+    border-radius: 12px;
+    padding: 0.72rem 0.8rem;
+    background: #fff;
+    font: inherit;
+  }
+
+  .mobile-queue-add button {
+    border: 0;
+    border-radius: 12px;
+    padding: 0 0.9rem;
+    background: rgba(249, 178, 215, 0.58);
+    font-weight: 900;
+  }
+
   .mobile-list-item button,
   .mobile-queue-item button {
     width: 100%;

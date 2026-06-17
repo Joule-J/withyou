@@ -163,6 +163,19 @@ describe("RoomStore", () => {
     expect(store.previousQueue(room.code, host.id)?.videoId).toBe("y8MArfXrn80");
   });
 
+  it("allows guests to add queue tracks without playback control", async () => {
+    const store = createStore();
+    const { room, participant: host } = store.createRoom("Host", "socket-1");
+    const { participant: guest } = store.joinRoom(room.code, "Guest", "socket-2");
+
+    await store.addQueueTracks(room.code, guest.id, ["https://music.youtube.com/watch?v=dQw4w9WgXcQ"]);
+
+    const snapshot = store.snapshot(room);
+    expect(snapshot.queue).toMatchObject([{ videoId: "dQw4w9WgXcQ", addedByName: "Guest" }]);
+    expect(() => store.advanceQueue(room.code, guest.id)).toThrowError("host");
+    expect(store.advanceQueue(room.code, host.id)?.videoId).toBe("dQw4w9WgXcQ");
+  });
+
   it("reorders queue tracks", async () => {
     const store = createStore();
     const { room, participant: host } = store.createRoom("Host", "socket-1");

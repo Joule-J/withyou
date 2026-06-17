@@ -226,7 +226,7 @@ export function Room({
     event.preventDefault();
     const parsed = parseMusicUrl(queueLinkDraft);
     if (!parsed) {
-      setQueueLinkError("Geçerli bir music.youtube.com/watch bağlantısı gir.");
+      setQueueLinkError("Geçerli bir YouTube veya YouTube Music şarkı linki gir.");
       return;
     }
 
@@ -741,11 +741,10 @@ export function Room({
             <input
               type="url"
               value={queueLinkDraft}
-              placeholder="Sıraya link eklenmedi."
-              disabled={!isHost}
+              placeholder="YouTube Music linki ekle"
               onChange={(event) => setQueueLinkDraft(event.target.value)}
             />
-            <button type="submit" disabled={!isHost || !queueLinkDraft.trim()} aria-label="Linki sıraya ekle">
+            <button type="submit" disabled={!queueLinkDraft.trim()} aria-label="Linki sıraya ekle">
               <ChevronRightGlyph />
             </button>
           </form>

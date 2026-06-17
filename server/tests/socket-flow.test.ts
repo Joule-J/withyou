@@ -51,7 +51,7 @@ describe("Socket.IO room flow", () => {
     });
   });
 
-  it("adds queue tracks without changing playback", async () => {
+  it("allows guests to add queue tracks without changing playback", async () => {
     const app = createApp({
       port: 0,
       roomCapacity: 10,
@@ -75,8 +75,8 @@ describe("Socket.IO room flow", () => {
     guest.emit("room:join", { roomCode: hostJoined.snapshot.roomCode, nickname: "Guest" });
     await waitFor(guest, "room:joined");
 
-    const snapshotPromise = waitFor<{ queue: Array<{ videoId: string }> }>(guest, "room:snapshot");
-    host.emit("queue:add", {
+    const snapshotPromise = waitFor<{ queue: Array<{ videoId: string; addedByName: string }> }>(host, "room:snapshot");
+    guest.emit("queue:add", {
       musicUrls: [
         "https://music.youtube.com/watch?v=dQw4w9WgXcQ",
         "https://music.youtube.com/watch?v=y8MArfXrn80",
@@ -84,7 +84,10 @@ describe("Socket.IO room flow", () => {
     });
 
     await expect(snapshotPromise).resolves.toMatchObject({
-      queue: [{ videoId: "dQw4w9WgXcQ" }, { videoId: "y8MArfXrn80" }],
+      queue: [
+        { videoId: "dQw4w9WgXcQ", addedByName: "Guest" },
+        { videoId: "y8MArfXrn80", addedByName: "Guest" },
+      ],
     });
   });
 
