@@ -17,6 +17,7 @@ import {
   leaveRoomSchema,
   playerCommandSchema,
   playlistReorderSchema,
+  playlistReplaceTracksSchema,
   playlistSaveSchema,
   playlistUpdateSchema,
   queueAddSchema,
@@ -103,6 +104,19 @@ export function createApp(config: Config): AppInstance {
       response.json({ playlist });
     } catch {
       response.status(400).json({ message: "Liste sirasi guncellenemedi." });
+    }
+  });
+  app.put("/api/playlists/:playlistId/tracks", async (request, response) => {
+    const parsed = playlistReplaceTracksSchema.safeParse({ musicUrls: request.body?.musicUrls });
+    if (!parsed.success) {
+      response.status(400).json({ message: "Gecersiz liste verisi." });
+      return;
+    }
+    try {
+      const playlist = await playlistService.replaceTracks(request.params.playlistId, parsed.data.musicUrls);
+      response.json({ playlist });
+    } catch (error) {
+      response.status(400).json({ message: mapPlaylistError(error) });
     }
   });
   app.patch("/api/playlists/:playlistId", async (request, response) => {

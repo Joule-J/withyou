@@ -3,6 +3,7 @@ import {
   deletePlaylist as deleteNamedPlaylist,
   listPlaylists,
   reorderPlaylist as persistPlaylistOrder,
+  replacePlaylistTracks as persistPlaylistTracks,
   savePlaylist as persistPlaylist,
   updatePlaylist as persistPlaylistUpdate,
   type Playlist,
@@ -245,7 +246,7 @@ export function Room({
     command("seek", nextPosition);
   }
 
-  function submitQueueLink(event: FormEvent) {
+  async function submitQueueLink(event: FormEvent) {
     event.preventDefault();
     const parsed = parseMusicUrl(queueLinkDraft);
     if (!parsed) {
@@ -254,7 +255,17 @@ export function Room({
     }
 
     setQueueLinkError(null);
+    const nextMusicUrls = buildNextQueueMusicUrls(queue, [parsed.normalizedUrl], snapshot.activeQueueItemId ?? undefined);
     onAddQueueTracks([parsed.normalizedUrl], snapshot.activeQueueItemId ?? undefined);
+    if (selectedPlaylistId) {
+      try {
+        const playlist = await persistPlaylistTracks(selectedPlaylistId, nextMusicUrls);
+        setPlaylists((existing) => existing.map((entry) => (entry.id === playlist.id ? playlist : entry)));
+        setPlaylistError(null);
+      } catch {
+        setPlaylistError("Liste veritabanina kaydedilemedi.");
+      }
+    }
     setQueueLinkDraft("");
   }
 
@@ -655,14 +666,14 @@ export function Room({
             </button>
           </form>
 
-          <section className="queue-panel">
+          <section className={`queue-panel${queue.length > 0 ? " has-queue-items" : ""}`}>
             <div className="sidebar-section-title queue-section-head">
               <div className="sidebar-title-copy">
                 <SidebarGlyph kind="note" />
                 <h2>Şarkılar</h2>
               </div>
             </div>
-            <ol className="queue-list rich-queue-list" ref={queueListRef as any}>
+            <ol className={`queue-list rich-queue-list${queue.length > 0 ? " has-items" : ""}`} ref={queueListRef as any}>
               {queue.length > 0 ? (
                 queue.map((track, index) => (
                   <li
@@ -1001,6 +1012,21 @@ function savePlaylistVinylChoices(choices: Record<string, string>) {
   } catch {
     // Ignore storage failures; deterministic cover fallback still works.
   }
+}
+
+function buildNextQueueMusicUrls(
+  queue: Array<{ musicUrl: string; id: string }>,
+  musicUrls: string[],
+  insertAfterId?: string,
+): string[] {
+  const next = queue.map((track) => track.musicUrl);
+  if (!insertAfterId) return [...next, ...musicUrls];
+
+  const index = queue.findIndex((track) => track.id === insertAfterId);
+  if (index === -1) return [...next, ...musicUrls];
+
+  next.splice(index + 1, 0, ...musicUrls);
+  return next;
 }
 
 type TransportGlyphProps = {

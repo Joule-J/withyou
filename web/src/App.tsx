@@ -13,6 +13,7 @@ export default function App() {
   const isMobile = useMemo(() => typeof navigator !== "undefined" && /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent), []);
   const [vinylShift, setVinylShift] = useState(false);
   const [decorVinylSrc, setDecorVinylSrc] = useState("/vinyls/13.png");
+  const [incomingDecorVinylSrc, setIncomingDecorVinylSrc] = useState<string | null>(null);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const lastTrackIdRef = useRef<string | null>(null);
   const vinylShiftTimeoutRef = useRef<number | null>(null);
@@ -20,22 +21,23 @@ export default function App() {
   const exitGuardActiveRef = useRef(false);
 
   const triggerVinylShift = useCallback((nextVinylSrc?: string) => {
+    const resolvedNextVinylSrc = nextVinylSrc ?? decorVinylSrc;
     if (vinylShiftTimeoutRef.current !== null) {
       window.clearTimeout(vinylShiftTimeoutRef.current);
     }
 
+    setIncomingDecorVinylSrc(resolvedNextVinylSrc);
     setVinylShift(false);
     window.requestAnimationFrame(() => {
       setVinylShift(true);
-      if (nextVinylSrc) {
-        window.setTimeout(() => setDecorVinylSrc(nextVinylSrc), 430);
-      }
       vinylShiftTimeoutRef.current = window.setTimeout(() => {
+        setDecorVinylSrc(resolvedNextVinylSrc);
+        setIncomingDecorVinylSrc(null);
         setVinylShift(false);
         vinylShiftTimeoutRef.current = null;
-      }, 920);
+      }, 960);
     });
-  }, []);
+  }, [decorVinylSrc]);
 
   useEffect(() => {
     const trackId = room.snapshot?.playback?.videoId ?? null;
@@ -168,7 +170,14 @@ export default function App() {
           className={`vinyl-decor spinning${room.snapshot.playback?.isPlaying ? "" : " paused"}${vinylShift ? " shifting" : ""}`}
           aria-hidden="true"
         >
-          <img src={decorVinylSrc} alt="" />
+          <div className="vinyl-decor-track vinyl-decor-track--current">
+            <img src={decorVinylSrc} alt="" />
+          </div>
+          {incomingDecorVinylSrc ? (
+            <div className="vinyl-decor-track vinyl-decor-track--incoming">
+              <img src={incomingDecorVinylSrc} alt="" />
+            </div>
+          ) : null}
         </div>
         <Room
           snapshot={room.snapshot}

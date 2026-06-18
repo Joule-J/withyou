@@ -75,6 +75,10 @@ export const playlistReorderSchema = z.object({
   musicUrls: z.array(z.string().url()).min(1).max(100),
 });
 
+export const playlistReplaceTracksSchema = z.object({
+  musicUrls: z.array(z.string().url()).min(1).max(100),
+});
+
 export const playlistSaveSchema = z.object({
   name: z.string().trim().min(1).max(60),
   musicUrls: z.array(z.string().url()).min(1).max(100),

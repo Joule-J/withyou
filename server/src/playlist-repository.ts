@@ -31,6 +31,7 @@ export interface PlaylistRepository {
   save(input: PlaylistDraft): Promise<PlaylistRecord>;
   rename(playlistId: string, name: string): Promise<PlaylistRecord>;
   reorder(playlistId: string, orderedMusicUrls: string[]): Promise<PlaylistRecord>;
+  replaceTracks(playlistId: string, tracks: PlaylistDraft["tracks"]): Promise<PlaylistRecord>;
   delete(playlistId: string): Promise<void>;
 }
 
@@ -79,6 +80,24 @@ export class InMemoryPlaylistRepository implements PlaylistRepository {
 
   async delete(playlistId: string): Promise<void> {
     this.playlists.delete(playlistId);
+  }
+
+  async replaceTracks(playlistId: string, tracks: PlaylistDraft["tracks"]): Promise<PlaylistRecord> {
+    const playlist = this.playlists.get(playlistId);
+    if (!playlist) throw new Error("PLAYLIST_NOT_FOUND");
+    const next = {
+      ...playlist,
+      tracks: tracks.map((track, index) => ({
+        id: `${playlistId}-${index}`,
+        title: track.title,
+        videoId: track.videoId,
+        musicUrl: track.musicUrl,
+        thumbnailUrl: track.thumbnailUrl,
+        position: index,
+      })),
+    };
+    this.playlists.set(playlistId, next);
+    return next;
   }
 
   async reorder(playlistId: string, orderedMusicUrls: string[]): Promise<PlaylistRecord> {
@@ -167,6 +186,31 @@ export class PrismaPlaylistRepository implements PlaylistRepository {
   async delete(playlistId: string): Promise<void> {
     await this.prisma.playlist.delete({ where: { id: playlistId } });
     this.cache = this.cache.filter((playlist) => playlist.id !== playlistId);
+  }
+
+  async replaceTracks(playlistId: string, tracks: PlaylistDraft["tracks"]): Promise<PlaylistRecord> {
+    await this.prisma.$transaction([
+      this.prisma.playlistTrack.deleteMany({ where: { playlistId } }),
+      this.prisma.playlistTrack.createMany({
+        data: tracks.map((track, index) => ({
+          playlistId,
+          title: track.title,
+          videoId: track.videoId,
+          musicUrl: track.musicUrl,
+          thumbnailUrl: track.thumbnailUrl,
+          position: index,
+        })),
+      }),
+    ]);
+
+    const refreshed = await this.prisma.playlist.findUniqueOrThrow({
+      where: { id: playlistId },
+      include: { tracks: { orderBy: { position: "asc" } } },
+    });
+
+    const record = this.toRecord(refreshed);
+    this.cache = this.cache.map((item) => (item.id === record.id ? record : item));
+    return record;
   }
 
   async reorder(playlistId: string, orderedMusicUrls: string[]): Promise<PlaylistRecord> {

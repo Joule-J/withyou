@@ -54,6 +54,29 @@ export class PlaylistService {
     return this.repository.reorder(playlistId, orderedMusicUrls);
   }
 
+  async replaceTracks(playlistId: string, musicUrls: string[]): Promise<PlaylistRecord> {
+    const uniqueUrls = [...new Set(musicUrls.map((url) => url.trim()).filter(Boolean))];
+    if (uniqueUrls.length === 0) {
+      throw new Error("LIST_TRACKS_REQUIRED");
+    }
+
+    const tracks = await Promise.all(
+      uniqueUrls.map(async (musicUrl) => {
+        const parsed = parseMusicUrl(musicUrl);
+        if (!parsed) throw new Error("INVALID_MUSIC_URL");
+        const metadata = await resolveTrackMetadata(parsed.videoId);
+        return {
+          title: metadata.title ?? parsed.videoId,
+          thumbnailUrl: metadata.thumbnailUrl,
+          videoId: parsed.videoId,
+          musicUrl: parsed.normalizedUrl,
+        };
+      }),
+    );
+
+    return this.repository.replaceTracks(playlistId, tracks);
+  }
+
   deletePlaylist(playlistId: string): Promise<void> {
     return this.repository.delete(playlistId);
   }

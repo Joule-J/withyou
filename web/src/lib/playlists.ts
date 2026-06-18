@@ -74,3 +74,14 @@ export async function reorderPlaylist(playlistId: string, musicUrls: string[]): 
   const payload = (await response.json()) as { playlist: Playlist };
   return payload.playlist;
 }
+
+export async function replacePlaylistTracks(playlistId: string, musicUrls: string[]): Promise<Playlist> {
+  const response = await fetch(`/api/playlists/${playlistId}/tracks`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ musicUrls }),
+  });
+  if (!response.ok) throw new Error("PLAYLIST_REPLACE_TRACKS_FAILED");
+  const payload = (await response.json()) as { playlist: Playlist };
+  return payload.playlist;
+}
