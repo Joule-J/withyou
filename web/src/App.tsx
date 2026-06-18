@@ -21,7 +21,7 @@ export default function App() {
   const exitGuardActiveRef = useRef(false);
 
   const triggerVinylShift = useCallback((nextVinylSrc?: string) => {
-    const resolvedNextVinylSrc = nextVinylSrc ?? decorVinylSrc;
+    const resolvedNextVinylSrc = nextVinylSrc ?? incomingDecorVinylSrc ?? decorVinylSrc;
     if (vinylShiftTimeoutRef.current !== null) {
       window.clearTimeout(vinylShiftTimeoutRef.current);
     }
@@ -37,7 +37,7 @@ export default function App() {
         vinylShiftTimeoutRef.current = null;
       }, 960);
     });
-  }, [decorVinylSrc]);
+  }, [decorVinylSrc, incomingDecorVinylSrc]);
 
   useEffect(() => {
     const trackId = room.snapshot?.playback?.videoId ?? null;
