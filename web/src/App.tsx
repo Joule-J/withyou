@@ -5,6 +5,8 @@ import { Room } from "./components/room";
 import MobileRoom from "./components/mobile-room";
 import { useRoom } from "./hooks/use-room";
 
+const EXIT_GUARD_STATE_KEY = "withyouRoomExitGuard";
+
 export default function App() {
   const initialRoomCode = useMemo(() => roomCodeFromPath(window.location.pathname), []);
   const room = useRoom(initialRoomCode);
@@ -15,6 +17,7 @@ export default function App() {
   const lastTrackIdRef = useRef<string | null>(null);
   const vinylShiftTimeoutRef = useRef<number | null>(null);
   const guardedRoomCodeRef = useRef<string | null>(null);
+  const exitGuardActiveRef = useRef(false);
 
   const triggerVinylShift = useCallback((nextVinylSrc?: string) => {
     if (vinylShiftTimeoutRef.current !== null) {
@@ -58,21 +61,30 @@ export default function App() {
   useEffect(() => {
     const roomCode = room.snapshot?.roomCode ?? null;
     if (!roomCode || !room.participantId) {
+      exitGuardActiveRef.current = false;
       guardedRoomCodeRef.current = null;
       setShowExitConfirm(false);
       return;
     }
 
-    if (guardedRoomCodeRef.current !== roomCode) {
+    const ensureGuardEntry = () => {
+      window.history.pushState({ [EXIT_GUARD_STATE_KEY]: true, roomCode }, "", `/room/${roomCode}`);
       guardedRoomCodeRef.current = roomCode;
-      window.history.pushState({ withyouRoomExitGuard: true, roomCode }, "", window.location.pathname);
-    }
+      exitGuardActiveRef.current = true;
+    };
 
-    const snapshotStillActive = (code: string) => guardedRoomCodeRef.current === code && room.snapshot?.roomCode === code;
+    const snapshotStillActive = (code: string) =>
+      exitGuardActiveRef.current &&
+      guardedRoomCodeRef.current === code &&
+      room.snapshot?.roomCode === code;
+
+    if (!snapshotStillActive(roomCode)) {
+      ensureGuardEntry();
+    }
 
     const handlePopState = () => {
       if (!snapshotStillActive(roomCode)) return;
-      window.history.pushState({ withyouRoomExitGuard: true, roomCode }, "", `/room/${roomCode}`);
+      ensureGuardEntry();
       setShowExitConfirm(true);
     };
 
@@ -95,6 +107,7 @@ export default function App() {
   }, []);
 
   const confirmLeaveRoom = useCallback(() => {
+    exitGuardActiveRef.current = false;
     guardedRoomCodeRef.current = null;
     setShowExitConfirm(false);
     room.leaveRoom();

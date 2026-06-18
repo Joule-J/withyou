@@ -72,7 +72,7 @@ export class InMemoryPlaylistRepository implements PlaylistRepository {
       (item) => item.id !== playlistId && samePlaylistName(item.name, name),
     );
     if (duplicate) throw new Error("LIST_NAME_EXISTS");
-    const next = { ...playlist, name, updatedAt: new Date().toISOString() };
+    const next = { ...playlist, name };
     this.playlists.set(playlistId, next);
     return next;
   }
@@ -151,7 +151,7 @@ export class PrismaPlaylistRepository implements PlaylistRepository {
   async rename(playlistId: string, name: string): Promise<PlaylistRecord> {
     const playlist = await this.prisma.playlist.update({
       where: { id: playlistId },
-      data: { name, updatedAt: new Date() },
+      data: { name },
       include: {
         tracks: {
           orderBy: { position: "asc" },
@@ -160,7 +160,7 @@ export class PrismaPlaylistRepository implements PlaylistRepository {
     });
 
     const record = this.toRecord(playlist);
-    this.cache = [record, ...this.cache.filter((item) => item.id !== record.id)];
+    this.cache = this.cache.map((item) => (item.id === record.id ? record : item));
     return record;
   }
 

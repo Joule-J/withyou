@@ -10,7 +10,7 @@ type Props = {
 
 export function Landing({ initialRoomCode, connected, error, onCreate, onJoin }: Props) {
   const [nickname, setNickname] = useState("");
-  const [roomCode, setRoomCode] = useState(initialRoomCode);
+  const [roomCode, setRoomCode] = useState("");
 
   const validNickname = nickname.trim().length >= 2 && nickname.trim().length <= 24;
   const validRoomCode = /^[A-Z0-9]{6}$/.test(roomCode.trim().toUpperCase());

@@ -282,15 +282,12 @@ export function Room({
           ? await persistPlaylistUpdate(playlistFormId, name)
           : await persistPlaylist(name, urls);
 
-      const nextVinylSrc = playlistFormVinyl;
-      setPlaylistVinylChoices((existing) => savePlaylistVinylChoice(existing, playlist.id, nextVinylSrc));
+      setPlaylistVinylChoices((existing) => savePlaylistVinylChoice(existing, playlist.id, playlistFormVinyl));
       setPlaylists((existing) =>
         playlistFormMode === "edit"
           ? existing.map((item) => (item.id === playlist.id ? playlist : item))
           : [playlist, ...existing.filter((item) => item.id !== playlist.id)],
       );
-      setSelectedPlaylistId(playlist.id);
-      onPlaylistVinylSwap?.(nextVinylSrc);
       setPlaylistError(null);
       setShowAddPlaylistOverlay(false);
       void refreshPlaylists();
@@ -461,8 +458,8 @@ export function Room({
         <section className="player-panel">
           <div className="panel-title wide">
             <div>
-              <h2>Birlikte Dinle</h2>
-              <p className="panel-copy">Host parçayı belirler, oda aynı anda dinler.</p>
+              <h2>Birlikte dinleyelim</h2>
+              <p className="panel-copy">Çünkü seni çoooooook seviyorummmmmmmm ♥️♥️</p>
             </div>
             {playback ? <span>{formatTime(position)} / {formatTime(duration)}</span> : null}
           </div>
@@ -490,7 +487,7 @@ export function Room({
               <div className="track-neighbors-inline">
                 <button
                   type="button"
-                  className="neighbor-track-button"
+                  className="neighbor-track-button neighbor-track-button--previous"
                   disabled={!isHost || queue.length === 0}
                   onClick={previousQueueTrack}
                   aria-label={`Önceki şarkı: ${previousTrack?.title || previousTrack?.videoId || "Yok"}`}
@@ -516,7 +513,7 @@ export function Room({
                 </div>
                 <button
                   type="button"
-                  className="neighbor-track-button"
+                  className="neighbor-track-button neighbor-track-button--next"
                   disabled={!isHost || queue.length === 0}
                   onClick={skipQueueTrack}
                   aria-label={`Sonraki şarkı: ${nextTrack?.title || nextTrack?.videoId || "Yok"}`}
@@ -645,11 +642,24 @@ export function Room({
             </ul>
           </section>
 
-          <section className="queue-panel sidebar-card">
+          <form className="sidebar-link-bar" onSubmit={submitQueueLink}>
+            <LinkGlyph />
+            <input
+              type="url"
+              value={queueLinkDraft}
+              placeholder="YouTube Music linki ekle"
+              onChange={(event) => setQueueLinkDraft(event.target.value)}
+            />
+            <button type="submit" disabled={!queueLinkDraft.trim()} aria-label="Linki sıraya ekle">
+              <ChevronRightGlyph />
+            </button>
+          </form>
+
+          <section className="queue-panel">
             <div className="sidebar-section-title queue-section-head">
               <div className="sidebar-title-copy">
                 <SidebarGlyph kind="note" />
-                <h2>Oda sırası</h2>
+                <h2>Şarkılar</h2>
               </div>
               <button
                 type="button"
@@ -720,19 +730,6 @@ export function Room({
               )}
             </ol>
           </section>
-
-          <form className="sidebar-link-bar sidebar-card" onSubmit={submitQueueLink}>
-            <LinkGlyph />
-            <input
-              type="url"
-              value={queueLinkDraft}
-              placeholder="YouTube Music linki ekle"
-              onChange={(event) => setQueueLinkDraft(event.target.value)}
-            />
-            <button type="submit" disabled={!queueLinkDraft.trim()} aria-label="Linki sıraya ekle">
-              <ChevronRightGlyph />
-            </button>
-          </form>
         </aside>
       </div>
 
