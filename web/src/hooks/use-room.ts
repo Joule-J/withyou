@@ -132,6 +132,10 @@ export function useRoom(initialRoomCode: string | null) {
     socketRef.current?.emit("queue:reorder", { orderedTrackIds });
   }, []);
 
+  const transferHost = useCallback((targetParticipantId: string) => {
+    socketRef.current?.emit("room:transfer-host", { targetParticipantId });
+  }, []);
+
   const serverNow = useCallback(() => Date.now() + serverOffsetMs, [serverOffsetMs]);
 
   const leaveRoom = useCallback(() => {
@@ -158,6 +162,7 @@ export function useRoom(initialRoomCode: string | null) {
     addQueueTracks,
     replaceQueueTracks,
     reorderQueue,
+    transferHost,
     advanceQueue,
     previousQueue,
     leaveRoom,

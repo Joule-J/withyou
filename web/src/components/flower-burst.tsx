@@ -51,7 +51,7 @@ export function FlowerBurst() {
 
     function onPointerDown(event: PointerEvent) {
       const target = event.target;
-      if (!(target instanceof Element) || !target.closest("button")) return;
+      if (!(target instanceof Element) || target.closest("input, textarea, select, [contenteditable='true']")) return;
       spawnParticles(event.clientX, event.clientY);
     }
 

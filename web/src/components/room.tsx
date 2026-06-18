@@ -4,6 +4,7 @@ import {
   listPlaylists,
   reorderPlaylist as persistPlaylistOrder,
   savePlaylist as persistPlaylist,
+  updatePlaylist as persistPlaylistUpdate,
   type Playlist,
 } from "../lib/playlists";
 import { parseMusicUrl } from "../lib/music-url";
@@ -18,6 +19,25 @@ import {
 import type { PlayerCommand, RoomSnapshot } from "../types";
 import { YouTubePlayer, type YouTubePlayerHandle } from "./youtube-player";
 
+const VINYL_ARTS = [
+  "/vinyls/13.png",
+  "/vinyls/12.png",
+  "/vinyls/11.png",
+  "/vinyls/1.png",
+  "/vinyls/2.png",
+  "/vinyls/3.png",
+  "/vinyls/4.png",
+  "/vinyls/5.png",
+  "/vinyls/6.png",
+  "/vinyls/7.png",
+  "/vinyls/8.png",
+  "/vinyls/9.png",
+];
+
+const PLAYLIST_VINYL_STORAGE_KEY = "withyou.playlistVinylChoices";
+
+type PlaylistFormMode = "create" | "edit";
+
 type Props = {
   snapshot: RoomSnapshot;
   participantId: string;
@@ -28,8 +48,10 @@ type Props = {
   onAddQueueTracks: (musicUrls: string[], insertAfterId?: string) => void;
   onReplaceQueueTracks: (musicUrls: string[]) => void;
   onReorderQueue: (orderedTrackIds: string[]) => void;
+  onTransferHost: (targetParticipantId: string) => void;
   onAdvanceQueue: () => void;
   onPreviousQueue: () => void;
+  onPlaylistVinylSwap?: (vinylSrc?: string) => void;
   onLeave: () => void;
 };
 
@@ -43,25 +65,31 @@ export function Room({
   onAddQueueTracks,
   onReplaceQueueTracks,
   onReorderQueue,
+  onTransferHost,
   onAdvanceQueue,
   onPreviousQueue,
+  onPlaylistVinylSwap,
   onLeave,
 }: Props) {
   const playerRef = useRef<YouTubePlayerHandle>(null);
   const [playerReady, setPlayerReady] = useState(false);
   const [queueLinkDraft, setQueueLinkDraft] = useState("");
-  const [queueDraft, setQueueDraft] = useState("");
-  const [playlistName, setPlaylistName] = useState("");
   const [queueLinkError, setQueueLinkError] = useState<string | null>(null);
   const [playlistError, setPlaylistError] = useState<string | null>(null);
   const [playerError, setPlayerError] = useState<string | null>(null);
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [playlistBusy, setPlaylistBusy] = useState(false);
   const [selectedPlaylistId, setSelectedPlaylistId] = useState<string | null>(null);
+  const [playlistVinylChoices, setPlaylistVinylChoices] = useState<Record<string, string>>(() => loadPlaylistVinylChoices());
   const [showAddPlaylistOverlay, setShowAddPlaylistOverlay] = useState(false);
-  const [showPlaylistOverlay, setShowPlaylistOverlay] = useState(false);
+  const [playlistFormMode, setPlaylistFormMode] = useState<PlaylistFormMode>("create");
+  const [playlistFormId, setPlaylistFormId] = useState<string | null>(null);
+  const [playlistFormName, setPlaylistFormName] = useState("");
+  const [playlistFormLinks, setPlaylistFormLinks] = useState("");
+  const [playlistFormVinyl, setPlaylistFormVinyl] = useState(VINYL_ARTS[0]);
+  const [pendingDeletePlaylist, setPendingDeletePlaylist] = useState<Playlist | null>(null);
   const [draggedQueueTrackId, setDraggedQueueTrackId] = useState<string | null>(null);
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [playlistEditMode, setPlaylistEditMode] = useState(false);
   const [needsUnlock, setNeedsUnlock] = useState(false);
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -156,11 +184,6 @@ export function Room({
   }, [refreshPlaylists, snapshot.roomCode]);
 
   useEffect(() => {
-    if (!showPlaylistOverlay) return;
-    void refreshPlaylists();
-  }, [refreshPlaylists, showPlaylistOverlay]);
-
-  useEffect(() => {
     applyPlayback("snapshot");
   }, [applyPlayback]);
 
@@ -237,26 +260,42 @@ export function Room({
 
   async function submitPlaylist(event: FormEvent) {
     event.preventDefault();
-    const urls = extractMusicUrls(queueDraft);
-    if (!playlistName.trim()) {
+    const name = playlistFormName.trim();
+    const urls = extractMusicUrls(playlistFormLinks);
+    if (!name) {
       setPlaylistError("Liste ismi gir.");
       return;
     }
-    if (urls.length === 0) {
+    if (hasDuplicatePlaylistName(playlists, name, playlistFormMode === "edit" ? playlistFormId : null)) {
+      setPlaylistError("Bu isimde bir liste zaten var.");
+      return;
+    }
+    if (playlistFormMode === "create" && urls.length === 0) {
       setPlaylistError("Listeye en az bir YouTube Music baglantisi ekle.");
       return;
     }
 
     setPlaylistBusy(true);
     try {
-      const playlist = await persistPlaylist(playlistName, urls);
-      setPlaylists((existing) => [playlist, ...existing.filter((item) => item.id !== playlist.id)]);
+      const playlist =
+        playlistFormMode === "edit" && playlistFormId
+          ? await persistPlaylistUpdate(playlistFormId, name)
+          : await persistPlaylist(name, urls);
+
+      const nextVinylSrc = playlistFormVinyl;
+      setPlaylistVinylChoices((existing) => savePlaylistVinylChoice(existing, playlist.id, nextVinylSrc));
+      setPlaylists((existing) =>
+        playlistFormMode === "edit"
+          ? existing.map((item) => (item.id === playlist.id ? playlist : item))
+          : [playlist, ...existing.filter((item) => item.id !== playlist.id)],
+      );
       setSelectedPlaylistId(playlist.id);
+      onPlaylistVinylSwap?.(nextVinylSrc);
       setPlaylistError(null);
       setShowAddPlaylistOverlay(false);
       void refreshPlaylists();
     } catch {
-      setPlaylistError("Liste kaydedilemedi.");
+      setPlaylistError(playlistFormMode === "edit" ? "Liste guncellenemedi." : "Liste kaydedilemedi.");
     } finally {
       setPlaylistBusy(false);
     }
@@ -283,27 +322,64 @@ export function Room({
     onPreviousQueue();
   }
 
+  function startSynchronization() {
+    const player = playerRef.current;
+    if (player && playback) {
+      player.unmute();
+      player.seek(targetPosition(playback, serverNow()));
+      player.play();
+      settleUntilRef.current = Date.now() + POST_ACTION_SETTLE_MS;
+    }
+    setNeedsUnlock(false);
+  }
+
   function applyPlaylist(playlist: Playlist) {
+    const vinylSrc = playlistVinylSrc(playlist, playlistVinylChoices);
+    if (playlist.id !== selectedPlaylistId) {
+      onPlaylistVinylSwap?.(vinylSrc);
+    }
     setSelectedPlaylistId(playlist.id);
-    setPlaylistName(playlist.name);
-    setQueueDraft(playlist.tracks.map((track) => track.musicUrl).join("\n"));
     if (isHost) {
       onReplaceQueueTracks(playlist.tracks.map((track) => track.musicUrl));
     }
+  }
+
+  function openCreatePlaylistOverlay() {
+    setPlaylistFormMode("create");
+    setPlaylistFormId(null);
+    setPlaylistFormName("");
+    setPlaylistFormLinks("");
+    setPlaylistFormVinyl(VINYL_ARTS[0]);
+    setPlaylistError(null);
+    setShowAddPlaylistOverlay(true);
+  }
+
+  function openEditPlaylistOverlay(playlist: Playlist) {
+    setPlaylistFormMode("edit");
+    setPlaylistFormId(playlist.id);
+    setPlaylistFormName(playlist.name);
+    setPlaylistFormLinks("");
+    setPlaylistFormVinyl(playlistVinylSrc(playlist, playlistVinylChoices));
+    setPlaylistError(null);
+    setShowAddPlaylistOverlay(true);
   }
 
   async function removePlaylist(playlistId: string) {
     setPlaylistBusy(true);
     try {
       await deleteNamedPlaylist(playlistId);
+      setPlaylistVinylChoices((existing) => {
+        const next = { ...existing };
+        delete next[playlistId];
+        savePlaylistVinylChoices(next);
+        return next;
+      });
       setPlaylists((existing) => existing.filter((p) => p.id !== playlistId));
       if (selectedPlaylistId === playlistId) {
         setSelectedPlaylistId(null);
-        setPlaylistName("");
-        setQueueDraft("");
       }
       setPlaylistError(null);
-      setConfirmDeleteId(null);
+      setPendingDeletePlaylist(null);
       void refreshPlaylists();
     } catch {
       setPlaylistError("Liste silinemedi.");
@@ -335,6 +411,19 @@ export function Room({
     }
   }
 
+  function playQueueTrack(track: RoomSnapshot["queue"][number]) {
+    if (!isHost) return;
+    onCommand({
+      type: "change_track",
+      videoId: track.videoId,
+      musicUrl: track.musicUrl,
+      title: track.title,
+      positionSeconds: 0,
+      clientCommandId: crypto.randomUUID(),
+      isPlaying: true,
+    });
+  }
+
   return (
     <main className="room-shell">
       <header className="room-header">
@@ -349,7 +438,21 @@ export function Room({
           </div>
         </div>
         <div className="header-actions">
-          <span className={`status-pill ${status}`}>{status === "connected" ? "Bağlı" : "Bağlantı kesildi"}</span>
+          {status !== "connected" ? (
+            <span className={`status-pill ${status}`}>{status === "connecting" ? "Bağlanıyor" : "Bağlantı kesildi"}</span>
+          ) : null}
+          {isHost ? (
+            <button
+              type="button"
+              className={`playlist-edit-toggle${playlistEditMode ? " is-active" : ""}`}
+              onClick={() => setPlaylistEditMode((active) => !active)}
+              aria-pressed={playlistEditMode}
+              title={playlistEditMode ? "Liste düzenlemeyi kapat" : "Listeleri düzenle"}
+              aria-label={playlistEditMode ? "Liste düzenlemeyi kapat" : "Listeleri düzenle"}
+            >
+              <EditGlyph />
+            </button>
+          ) : null}
           <button className="text-button" onClick={onLeave}>Odadan çık</button>
         </div>
       </header>
@@ -378,24 +481,6 @@ export function Room({
             </div>
           )}
 
-          {needsUnlock ? (
-            <button
-              className="unlock-button"
-              onClick={() => {
-                const player = playerRef.current;
-                if (player && playback) {
-                  player.unmute();
-                  player.seek(targetPosition(playback, serverNow()));
-                  player.play();
-                  settleUntilRef.current = Date.now() + POST_ACTION_SETTLE_MS;
-                }
-                setNeedsUnlock(false);
-              }}
-            >
-              Senkronizasyonu başlat
-            </button>
-          ) : null}
-
           <div className="host-controls">
             <div className="transport-card compact player-transport-panel">
               <div className="player-transport-header">
@@ -403,7 +488,13 @@ export function Room({
               </div>
 
               <div className="track-neighbors-inline">
-                <div>
+                <button
+                  type="button"
+                  className="neighbor-track-button"
+                  disabled={!isHost || queue.length === 0}
+                  onClick={previousQueueTrack}
+                  aria-label={`Önceki şarkı: ${previousTrack?.title || previousTrack?.videoId || "Yok"}`}
+                >
                   <Artwork
                     className="mini-neighbor-cover"
                     src={previousTrack?.thumbnailUrl}
@@ -412,8 +503,7 @@ export function Room({
                   <div className="neighbor-copy">
                     <strong>{previousTrack?.title || previousTrack?.videoId || "Yok"}</strong>
                   </div>
-                </div>
-                <span className="neighbor-divider" aria-hidden="true">|</span>
+                </button>
                 <div className="current-track-inline">
                   <Artwork
                     className="mini-neighbor-cover playing"
@@ -424,8 +514,13 @@ export function Room({
                     <strong>{currentTrackLabel}</strong>
                   </div>
                 </div>
-                <span className="neighbor-divider" aria-hidden="true">|</span>
-                <div>
+                <button
+                  type="button"
+                  className="neighbor-track-button"
+                  disabled={!isHost || queue.length === 0}
+                  onClick={skipQueueTrack}
+                  aria-label={`Sonraki şarkı: ${nextTrack?.title || nextTrack?.videoId || "Yok"}`}
+                >
                   <Artwork
                     className="mini-neighbor-cover"
                     src={nextTrack?.thumbnailUrl}
@@ -434,7 +529,7 @@ export function Room({
                   <div className="neighbor-copy">
                     <strong>{nextTrack?.title || nextTrack?.videoId || "Yok"}</strong>
                   </div>
-                </div>
+                </button>
               </div>
 
               <div className="player-transport-row">
@@ -513,145 +608,41 @@ export function Room({
           {error || playerError ? <p className="error-message" role="alert">{error || playerError}</p> : null}
         </section>
 
+        {needsUnlock ? (
+          <button className="unlock-button" onClick={startSynchronization}>
+            Senkronizasyonu başlat
+          </button>
+        ) : null}
+
         <aside className="sidebar-stack">
           <section className="participants-panel sidebar-card compact-panel">
             <div className="sidebar-section-title">
               <div className="sidebar-title-copy">
-                <SidebarGlyph kind="people" />
                 <h2>Odadakiler</h2>
               </div>
-              <button className="collapse-indicator" type="button" aria-label="Odadakiler paneli">
-                <span>{participants.length}/10</span>
-                <ChevronGlyph />
-              </button>
             </div>
             <ul className="participant-list">
-              {participants.map((participant, index) => (
+              {participants.map((participant) => (
                 <li className="participant-card" key={participant.id}>
-                  <div className={`participant-avatar avatar-${index % 4}`}>
-                    <span>{participant.nickname.slice(0, 1).toUpperCase()}</span>
-                  </div>
                   <div className="participant-copy">
                     <span>{participant.nickname}{participant.id === participantId ? " (sen)" : ""}</span>
-                    {participant.isHost ? <strong>HOST</strong> : null}
+                    <div className="participant-meta">
+                      {participant.isHost ? <span className="host-badge">Host</span> : null}
+                      {!participant.isConnected ? <span className="connection-badge">Koptu</span> : null}
+                    </div>
                   </div>
-                  <span className={`presence-dot ${participant.isConnected ? "online" : ""}`} />
+                  {isHost && participant.id !== participantId && participant.isConnected ? (
+                    <button
+                      type="button"
+                      className="transfer-host-button"
+                      onClick={() => onTransferHost(participant.id)}
+                    >
+                      Host yap
+                    </button>
+                  ) : null}
                 </li>
               ))}
             </ul>
-          </section>
-
-          {null}
-
-          <section className="playlists-panel sidebar-card">
-            <div className="sidebar-section-title">
-              <div className="sidebar-title-copy">
-                <SidebarGlyph kind="heart" />
-                <h2>Listeler</h2>
-              </div>
-              {isHost ? (
-                <button
-                  type="button"
-                  className={`panel-action-pill`}
-                  onClick={() => setShowAddPlaylistOverlay(true)}
-                  title="Yeni liste ekle"
-                  aria-label="Yeni liste ekle"
-                >
-                  <PlusGlyph />
-                </button>
-              ) : (
-                <span className="panel-count-pill">{playlists.length} liste</span>
-              )}
-            </div>
-
-            {/* Add playlist via overlay modal (opened with the + button) */}
-
-              <div className="pl-scroll-panel">
-                <ul className="pl-list">
-              {playlists.length > 0 ? (
-                playlists.map((playlist, index) => (
-                  <li
-                    key={playlist.id}
-                    className={`pl-item${playlist.id === selectedPlaylistId ? " pl-item--sel" : ""}`}
-                  >
-                    <Artwork
-                      className={`pl-thumb cover-${index % 4}`}
-                      src={playlist.tracks[0]?.thumbnailUrl}
-                      fallback={playlist.name}
-                    />
-                    <div className="pl-info" onClick={() => applyPlaylist(playlist)} style={{ cursor: "pointer" }}>
-                      <strong>{playlist.name}</strong>
-                      <small>
-                        {playlist.tracks.length} şarkı · {formatRelativeDate(playlist.updatedAt)}
-                      </small>
-                    </div>
-                    <div className="pl-btns">
-                      {confirmDeleteId === playlist.id ? (
-                        <div className="pl-confirm">
-                          <button
-                            type="button"
-                            className="pl-del-confirm"
-                            disabled={playlistBusy}
-                            onClick={() => void removePlaylist(playlist.id)}
-                          >
-                            Sil
-                          </button>
-                          <button
-                            type="button"
-                            className="icon-menu-button"
-                            onClick={() => setConfirmDeleteId(null)}
-                            aria-label="İptal"
-                          >
-                            <CloseGlyph />
-                          </button>
-                        </div>
-                      ) : (
-                        <>
-                          <button
-                            type="button"
-                            className="icon-menu-button pl-play"
-                            onClick={() => applyPlaylist(playlist)}
-                            title="Listeyi oda sırasına yükle"
-                            aria-label={`${playlist.name} listesini oynat`}
-                          >
-                            <PlayMiniGlyph />
-                          </button>
-                          {isHost ? (
-                            <button
-                              type="button"
-                              className="icon-menu-button pl-del"
-                              disabled={playlistBusy}
-                              onClick={() => setConfirmDeleteId(playlist.id)}
-                              title="Sil"
-                              aria-label={`${playlist.name} listesini sil`}
-                            >
-                              <CloseGlyph />
-                            </button>
-                          ) : null}
-                        </>
-                      )}
-                    </div>
-                  </li>
-                ))
-              ) : (
-                <li className="pl-empty">
-                  {playlistBusy ? "Yükleniyor…" : "Kayıtlı liste yok."}
-                </li>
-              )}
-              </ul>
-            </div>
-
-            <button
-              type="button"
-              className="show-all-button"
-              onClick={() => {
-                void refreshPlaylists();
-                setShowPlaylistOverlay(true);
-              }}
-            >
-              Tüm listeler
-              <ChevronGlyph />
-            </button>
           </section>
 
           <section className="queue-panel sidebar-card">
@@ -676,6 +667,7 @@ export function Room({
                   <li
                     className={track.id === activeQueueItemId ? "active" : ""}
                     key={track.id}
+                    onClick={() => playQueueTrack(track)}
                     onDragOver={(event) => event.preventDefault()}
                     onDrop={() => void reorderQueueTracks(track.id)}
                   >
@@ -693,17 +685,9 @@ export function Room({
                       <button
                         type="button"
                         className="icon-menu-button queue-play-button"
-                        onClick={() => {
-                          if (!isHost) return;
-                          onCommand({
-                            type: "change_track",
-                            videoId: track.videoId,
-                            musicUrl: track.musicUrl,
-                            title: track.title,
-                            positionSeconds: 0,
-                            clientCommandId: crypto.randomUUID(),
-                            isPlaying: true,
-                          });
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          playQueueTrack(track);
                         }}
                         disabled={!isHost}
                         title="Bu parçayı çal"
@@ -716,10 +700,12 @@ export function Room({
                         className="icon-menu-button queue-drag-handle"
                         draggable={isHost}
                         onDragStart={(event) => {
+                          event.stopPropagation();
                           setDraggedQueueTrackId(track.id);
                           event.dataTransfer.effectAllowed = "move";
                         }}
                         onDragEnd={() => setDraggedQueueTrackId(null)}
+                        onClick={(event) => event.stopPropagation()}
                         disabled={!isHost}
                         title="Sırayı sürükle"
                         aria-label={`${track.title || track.videoId} sırasını değiştir`}
@@ -734,7 +720,6 @@ export function Room({
               )}
             </ol>
           </section>
-
 
           <form className="sidebar-link-bar sidebar-card" onSubmit={submitQueueLink}>
             <LinkGlyph />
@@ -751,98 +736,183 @@ export function Room({
         </aside>
       </div>
 
-      {showPlaylistOverlay ? (
-        <div className="playlist-overlay" role="dialog" aria-modal="true" aria-label="Tüm listeler">
-          <div className="playlist-overlay-backdrop" onClick={() => setShowPlaylistOverlay(false)} />
-          <section className="playlist-overlay-panel">
-            <div className="playlist-overlay-header">
-              <div>
-                <h2>Tüm listeler</h2>
-                <p className="panel-copy">DB’de kayıtlı tüm listeler burada görünür.</p>
+      <section className="playlist-vinyl-rail" aria-label="Kayitli listeler">
+        <div className="playlist-vinyl-scroller">
+          {playlists.length > 0 ? (
+            <div className="playlist-vinyl-row">
+              {playlists.map((playlist) => {
+                const isSelected = playlist.id === selectedPlaylistId;
+                const showActions = isHost && playlistEditMode;
+                const vinylSrc = playlistVinylSrc(playlist, playlistVinylChoices);
+
+                return (
+                  <div
+                    key={playlist.id}
+                    className={`vinyl-record-shell${isSelected ? " is-active" : ""}`}
+                  >
+                    <button
+                      type="button"
+                      className={`vinyl-record-button${isSelected ? " is-active" : ""}`}
+                      onClick={() => applyPlaylist(playlist)}
+                      aria-label={`${playlist.name} listesini ${isHost ? "oda sirasina yukle" : "sec"}`}
+                      title={`${playlist.name} · ${playlist.tracks.length} sarki`}
+                    >
+                      <img src={vinylSrc} alt="" aria-hidden="true" />
+                    </button>
+                    <span className="vinyl-record-name">{playlist.name}</span>
+                    {isHost ? (
+                      <>
+                        <button
+                          type="button"
+                          className={`vinyl-edit-badge${showActions ? " is-visible" : ""}`}
+                          disabled={playlistBusy}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            openEditPlaylistOverlay(playlist);
+                          }}
+                          aria-label={`${playlist.name} listesini duzenle`}
+                          title="Duzenle"
+                        >
+                          <EditGlyph />
+                        </button>
+                        <button
+                          type="button"
+                          className={`vinyl-delete-badge${showActions ? " is-visible" : ""}`}
+                          disabled={playlistBusy}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setPendingDeletePlaylist(playlist);
+                          }}
+                          aria-label={`${playlist.name} listesini sil`}
+                          title="Sil"
+                        >
+                          <CloseGlyph />
+                        </button>
+                      </>
+                    ) : null}
+                  </div>
+                );
+              })}
+
+              <div className="vinyl-record-shell vinyl-record-shell--add">
+                <button
+                  type="button"
+                  className="vinyl-record-button vinyl-record-button--plus"
+                  onClick={openCreatePlaylistOverlay}
+                  aria-label="Yeni liste olustur"
+                  title="Yeni liste"
+                >
+                  <img src="/vinyls/11.png" alt="" aria-hidden="true" />
+                  <span className="vinyl-record-plus">
+                    <PlusGlyph />
+                  </span>
+                </button>
+                <span className="vinyl-record-name">Yeni liste</span>
               </div>
-              <button type="button" className="icon-menu-button" onClick={() => setShowPlaylistOverlay(false)} aria-label="Kapat">
-                <CloseGlyph />
-              </button>
             </div>
-
-            <div className="playlist-overlay-toolbar">
-              <button type="button" className="refresh-button" onClick={() => void refreshPlaylists()}>
-                <RefreshGlyph />
-                Yenile
-              </button>
-              <span className="panel-count-pill">{playlists.length} liste</span>
+          ) : (
+            <div className="playlist-vinyl-empty">
+              {playlistBusy ? "Listeler yukleniyor..." : "Henuz kayitli liste yok. Yeni liste icin + plagi kullan."}
             </div>
-
-            <div className="playlist-overlay-list-shell">
-              {playlists.length > 0 ? (
-                <ul className="playlist-overlay-list">
-                  {playlists.map((playlist, index) => (
-                    <li key={playlist.id} className={playlist.id === selectedPlaylistId ? "selected" : ""}>
-                      <Artwork
-                        className={`playlist-cover cover-${index % 4}`}
-                        src={playlist.tracks[0]?.thumbnailUrl}
-                        fallback={playlist.name}
-                      />
-                      <div className="playlist-item-copy" onClick={() => applyPlaylist(playlist)} style={{ cursor: "pointer" }}>
-                        <div className="playlist-item-topline">
-                          <strong>{playlist.name}</strong>
-                        </div>
-                        <small>
-                          {playlist.tracks.length} şarkı · {formatRelativeDate(playlist.updatedAt)}
-                        </small>
-                      </div>
-                      <button
-                        type="button"
-                        className="icon-menu-button pl-play"
-                        onClick={() => applyPlaylist(playlist)}
-                        aria-label={`${playlist.name} listesini yükle`}
-                      >
-                        <PlayMiniGlyph />
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <div className="saved-empty">Kayıtlı liste yok.</div>
-              )}
-            </div>
-          </section>
+          )}
         </div>
-      ) : null}
+      </section>
 
       {showAddPlaylistOverlay ? (
         <div className="playlist-overlay" role="dialog" aria-modal="true">
           <div className="playlist-overlay-backdrop" onClick={() => setShowAddPlaylistOverlay(false)} />
           <section className="playlist-overlay-panel">
             <div className="playlist-overlay-header">
-              <h2>Yeni liste</h2>
+              <div>
+                <span className="modal-kicker">{playlistFormMode === "edit" ? "LISTE AYARLARI" : "YENI KOLEKSIYON"}</span>
+                <h2>{playlistFormMode === "edit" ? "Listeyi düzenle" : "Yeni liste"}</h2>
+              </div>
               <button type="button" className="icon-menu-button" onClick={() => setShowAddPlaylistOverlay(false)} aria-label="Kapat">
                 <CloseGlyph />
               </button>
             </div>
-            <form className="pf-form" onSubmit={submitPlaylist}>
-              <label htmlFor="playlist-name">Liste adı</label>
-              <input
-                id="playlist-name"
-                value={playlistName}
-                placeholder="liste1"
-                onChange={(event) => setPlaylistName(event.target.value)}
-              />
-              <label htmlFor="queue-links">Linkler</label>
-              <textarea
-                id="queue-links"
-                value={queueDraft}
-                rows={6}
-                placeholder={"https://music.youtube.com/watch?v=...\nhttps://music.youtube.com/watch?v=..."}
-                onChange={(event) => setQueueDraft(event.target.value)}
-              />
-              <div className="pf-actions">
-                <button type="submit" className="pf-save" disabled={playlistBusy}>
-                  Kaydet
-                </button>
+            <form className="pf-form playlist-create-form" onSubmit={submitPlaylist}>
+              <div className="playlist-create-fields">
+                <label htmlFor="playlist-name">Liste adı</label>
+                <input
+                  id="playlist-name"
+                  value={playlistFormName}
+                  placeholder="Gece sürüşü"
+                  onChange={(event) => setPlaylistFormName(event.target.value)}
+                />
+                {playlistFormMode === "create" ? (
+                  <>
+                    <label htmlFor="queue-links">Linkler</label>
+                    <textarea
+                      id="queue-links"
+                      value={playlistFormLinks}
+                      rows={8}
+                      placeholder={"https://music.youtube.com/watch?v=...\nhttps://music.youtube.com/watch?v=..."}
+                      onChange={(event) => setPlaylistFormLinks(event.target.value)}
+                    />
+                  </>
+                ) : (
+                  <div className="playlist-edit-note">
+                    Kapak ve isim güncellenir. Şarkı sırasını oda sırasından sürükleyerek değiştirebilirsin.
+                  </div>
+                )}
+                <div className="pf-actions">
+                  <button type="submit" className="pf-save" disabled={playlistBusy}>
+                    {playlistFormMode === "edit" ? "Güncelle" : "Kaydet"}
+                  </button>
+                </div>
+                {playlistError ? <p className="error-message" role="alert">{playlistError}</p> : null}
               </div>
-              {playlistError ? <p className="error-message" role="alert">{playlistError}</p> : null}
+
+              <div className="playlist-cover-picker">
+                <label>Kapak</label>
+                <div className="playlist-cover-preview">
+                  <img src={playlistFormVinyl} alt="" aria-hidden="true" />
+                </div>
+                <div className="playlist-cover-grid">
+                  {VINYL_ARTS.map((vinylSrc, index) => (
+                    <button
+                      type="button"
+                      key={vinylSrc}
+                      className={`playlist-cover-option${playlistFormVinyl === vinylSrc ? " is-selected" : ""}`}
+                      onClick={() => setPlaylistFormVinyl(vinylSrc)}
+                      aria-label={`Kapak ${index + 1}`}
+                    >
+                      <img src={vinylSrc} alt="" aria-hidden="true" />
+                    </button>
+                  ))}
+                </div>
+              </div>
             </form>
+          </section>
+        </div>
+      ) : null}
+
+      {pendingDeletePlaylist ? (
+        <div className="confirm-overlay" role="dialog" aria-modal="true" aria-label="Liste silme onayi">
+          <div className="confirm-overlay-backdrop" onClick={() => setPendingDeletePlaylist(null)} />
+          <section className="confirm-panel">
+            <div className="confirm-vinyl">
+              <img src={playlistVinylSrc(pendingDeletePlaylist, playlistVinylChoices)} alt="" aria-hidden="true" />
+            </div>
+            <div className="confirm-copy">
+              <span className="modal-kicker">EMIN MISIN?</span>
+              <h2>{pendingDeletePlaylist.name}</h2>
+              <p>Bu liste kalıcı olarak silinecek.</p>
+            </div>
+            <div className="confirm-actions">
+              <button type="button" className="confirm-secondary" onClick={() => setPendingDeletePlaylist(null)}>
+                Vazgeç
+              </button>
+              <button
+                type="button"
+                className="confirm-danger"
+                disabled={playlistBusy}
+                onClick={() => void removePlaylist(pendingDeletePlaylist.id)}
+              >
+                Sil
+              </button>
+            </div>
           </section>
         </div>
       ) : null}
@@ -898,6 +968,51 @@ function queueNeighbors(queue: RoomSnapshot["queue"], activeQueueItemId: string 
     previousTrack: queue[(currentIndex - 1 + queue.length) % queue.length] ?? null,
     nextTrack: queue[(currentIndex + 1) % queue.length] ?? null,
   };
+}
+
+function playlistVinylSrc(playlist: Playlist, choices: Record<string, string>) {
+  return choices[playlist.id] ?? VINYL_ARTS[stableHash(playlist.id || playlist.name) % VINYL_ARTS.length];
+}
+
+function hasDuplicatePlaylistName(playlists: Playlist[], name: string, exceptPlaylistId: string | null): boolean {
+  const normalized = name.trim().toLocaleLowerCase("tr");
+  return playlists.some(
+    (playlist) => playlist.id !== exceptPlaylistId && playlist.name.trim().toLocaleLowerCase("tr") === normalized,
+  );
+}
+
+function savePlaylistVinylChoice(existing: Record<string, string>, playlistId: string, vinylSrc: string) {
+  const next = { ...existing, [playlistId]: vinylSrc };
+  savePlaylistVinylChoices(next);
+  return next;
+}
+
+function stableHash(value: string) {
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
+  }
+  return hash;
+}
+
+function loadPlaylistVinylChoices() {
+  if (typeof window === "undefined") return {};
+  try {
+    const stored = window.localStorage.getItem(PLAYLIST_VINYL_STORAGE_KEY);
+    if (!stored) return {};
+    const parsed = JSON.parse(stored) as Record<string, string>;
+    return Object.fromEntries(Object.entries(parsed).filter(([, value]) => VINYL_ARTS.includes(value)));
+  } catch {
+    return {};
+  }
+}
+
+function savePlaylistVinylChoices(choices: Record<string, string>) {
+  try {
+    window.localStorage.setItem(PLAYLIST_VINYL_STORAGE_KEY, JSON.stringify(choices));
+  } catch {
+    // Ignore storage failures; deterministic cover fallback still works.
+  }
 }
 
 type TransportGlyphProps = {
@@ -1025,6 +1140,15 @@ function CloseGlyph() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function EditGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M5 19h4l9.2-9.2a2.1 2.1 0 0 0-3-3L6 16v3Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+      <path d="m13.8 8.2 2 2" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
     </svg>
   );
 }

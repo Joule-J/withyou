@@ -24,6 +24,10 @@ export const leaveRoomSchema = z.object({
   roomCode,
 });
 
+export const transferHostSchema = z.object({
+  targetParticipantId: participantId,
+});
+
 export const playerCommandSchema = z
   .object({
     type: z.enum(["play", "pause", "seek", "change_track"]),
@@ -74,6 +78,10 @@ export const playlistReorderSchema = z.object({
 export const playlistSaveSchema = z.object({
   name: z.string().trim().min(1).max(60),
   musicUrls: z.array(z.string().url()).min(1).max(100),
+});
+
+export const playlistUpdateSchema = z.object({
+  name: z.string().trim().min(1).max(60),
 });
 
 export function parseMusicUrl(value: string): { videoId: string; normalizedUrl: string } | null {

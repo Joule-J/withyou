@@ -97,6 +97,38 @@ describe("RoomStore", () => {
     expect(result.room?.hostParticipantId).toBe(firstGuest.id);
   });
 
+  it("lets the host transfer host control to a connected participant", () => {
+    const store = createStore();
+    const { room, participant: host } = store.createRoom("Host", "socket-1");
+    const guest = store.joinRoom(room.code, "Guest", "socket-2").participant;
+
+    const result = store.transferHost(room.code, host.id, guest.id);
+
+    expect(result.newHostId).toBe(guest.id);
+    expect(room.hostParticipantId).toBe(guest.id);
+    expect(store.snapshot(room).participants.find((participant) => participant.id === guest.id)?.isHost).toBe(true);
+  });
+
+  it("rejects host transfers from non-host participants", () => {
+    const store = createStore();
+    const { room, participant: host } = store.createRoom("Host", "socket-1");
+    const guest = store.joinRoom(room.code, "Guest", "socket-2").participant;
+    const otherGuest = store.joinRoom(room.code, "Other", "socket-3").participant;
+
+    expect(() => store.transferHost(room.code, guest.id, otherGuest.id)).toThrowError(StoreError);
+    expect(room.hostParticipantId).toBe(host.id);
+  });
+
+  it("rejects host transfers to disconnected participants", () => {
+    const store = createStore();
+    const { room, participant: host } = store.createRoom("Host", "socket-1");
+    const guest = store.joinRoom(room.code, "Guest", "socket-2").participant;
+    store.markDisconnected(room.code, guest.id);
+
+    expect(() => store.transferHost(room.code, host.id, guest.id)).toThrowError("bagli");
+    expect(room.hostParticipantId).toBe(host.id);
+  });
+
   it("deletes an empty room", () => {
     const store = createStore();
     const { room, participant } = store.createRoom("Host", "socket-1");

@@ -122,6 +122,21 @@ export class RoomStore {
     return { room, removed, newHostId };
   }
 
+  transferHost(code: string, currentHostId: string, targetParticipantId: string) {
+    const room = this.requireRoom(code);
+    this.requireHost(room, currentHostId);
+    const target = this.requireParticipant(room, targetParticipantId);
+    if (target.id === currentHostId) {
+      throw new StoreError("INVALID_HOST_TRANSFER", "Secilen katilimci zaten host.");
+    }
+    if (target.socketId === null) {
+      throw new StoreError("TARGET_NOT_CONNECTED", "Hostluk yalnizca bagli bir katilimciya verilebilir.");
+    }
+
+    room.hostParticipantId = target.id;
+    return { room, newHostId: target.id };
+  }
+
   async applyPlayerCommand(code: string, participantId: string, command: PlayerCommand): Promise<PlaybackState> {
     const room = this.requireRoom(code);
     if (room.hostParticipantId !== participantId) {

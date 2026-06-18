@@ -14,6 +14,7 @@ export class PlaylistService {
     if (!normalizedName) {
       throw new Error("LIST_NAME_REQUIRED");
     }
+    await this.requireAvailableName(normalizedName);
 
     const uniqueUrls = [...new Set(musicUrls.map((url) => url.trim()).filter(Boolean))];
     if (uniqueUrls.length === 0) {
@@ -40,11 +41,28 @@ export class PlaylistService {
     });
   }
 
+  async renamePlaylist(playlistId: string, name: string): Promise<PlaylistRecord> {
+    const normalizedName = name.trim();
+    if (!normalizedName) {
+      throw new Error("LIST_NAME_REQUIRED");
+    }
+    await this.requireAvailableName(normalizedName, playlistId);
+    return this.repository.rename(playlistId, normalizedName);
+  }
+
   reorderPlaylist(playlistId: string, orderedMusicUrls: string[]): Promise<PlaylistRecord> {
     return this.repository.reorder(playlistId, orderedMusicUrls);
   }
 
   deletePlaylist(playlistId: string): Promise<void> {
     return this.repository.delete(playlistId);
+  }
+
+  private async requireAvailableName(name: string, exceptPlaylistId?: string): Promise<void> {
+    const playlists = await this.repository.list();
+    const duplicate = playlists.find(
+      (playlist) => playlist.id !== exceptPlaylistId && playlist.name.trim().toLocaleLowerCase("tr") === name.toLocaleLowerCase("tr"),
+    );
+    if (duplicate) throw new Error("LIST_NAME_EXISTS");
   }
 }

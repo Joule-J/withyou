@@ -29,6 +29,7 @@ export type PlaylistDraft = {
 export interface PlaylistRepository {
   list(): Promise<PlaylistRecord[]>;
   save(input: PlaylistDraft): Promise<PlaylistRecord>;
+  rename(playlistId: string, name: string): Promise<PlaylistRecord>;
   reorder(playlistId: string, orderedMusicUrls: string[]): Promise<PlaylistRecord>;
   delete(playlistId: string): Promise<void>;
 }
@@ -45,13 +46,14 @@ export class InMemoryPlaylistRepository implements PlaylistRepository {
   }
 
   async save(input: PlaylistDraft): Promise<PlaylistRecord> {
-    const existing = [...this.playlists.values()].find((playlist) => playlist.name === input.name);
+    const existing = [...this.playlists.values()].find((playlist) => samePlaylistName(playlist.name, input.name));
+    if (existing) throw new Error("LIST_NAME_EXISTS");
     const next: PlaylistRecord = {
-      id: existing?.id ?? `playlist-${Math.random().toString(36).slice(2, 10)}`,
+      id: `playlist-${Math.random().toString(36).slice(2, 10)}`,
       name: input.name,
       updatedAt: new Date().toISOString(),
       tracks: input.tracks.map((track, index) => ({
-        id: `${existing?.id ?? input.name}-${index}`,
+        id: `${input.name}-${index}`,
         title: track.title,
         videoId: track.videoId,
         musicUrl: track.musicUrl,
@@ -60,6 +62,18 @@ export class InMemoryPlaylistRepository implements PlaylistRepository {
       })),
     };
     this.playlists.set(next.id, next);
+    return next;
+  }
+
+  async rename(playlistId: string, name: string): Promise<PlaylistRecord> {
+    const playlist = this.playlists.get(playlistId);
+    if (!playlist) throw new Error("PLAYLIST_NOT_FOUND");
+    const duplicate = [...this.playlists.values()].find(
+      (item) => item.id !== playlistId && samePlaylistName(item.name, name),
+    );
+    if (duplicate) throw new Error("LIST_NAME_EXISTS");
+    const next = { ...playlist, name, updatedAt: new Date().toISOString() };
+    this.playlists.set(playlistId, next);
     return next;
   }
 
@@ -100,12 +114,8 @@ export class PrismaPlaylistRepository implements PlaylistRepository {
   }
 
   async save(input: PlaylistDraft): Promise<PlaylistRecord> {
-    const playlist = await this.prisma.playlist.upsert({
-      where: { name: input.name },
-      update: {
-        updatedAt: new Date(),
-      },
-      create: {
+    const playlist = await this.prisma.playlist.create({
+      data: {
         name: input.name,
       },
     });
@@ -134,6 +144,22 @@ export class PrismaPlaylistRepository implements PlaylistRepository {
     });
 
     const record = this.toRecord(refreshed);
+    this.cache = [record, ...this.cache.filter((item) => item.id !== record.id)];
+    return record;
+  }
+
+  async rename(playlistId: string, name: string): Promise<PlaylistRecord> {
+    const playlist = await this.prisma.playlist.update({
+      where: { id: playlistId },
+      data: { name, updatedAt: new Date() },
+      include: {
+        tracks: {
+          orderBy: { position: "asc" },
+        },
+      },
+    });
+
+    const record = this.toRecord(playlist);
     this.cache = [record, ...this.cache.filter((item) => item.id !== record.id)];
     return record;
   }
@@ -230,6 +256,10 @@ export class PrismaPlaylistRepository implements PlaylistRepository {
       })),
     };
   }
+}
+
+function samePlaylistName(a: string, b: string): boolean {
+  return a.trim().toLocaleLowerCase("tr") === b.trim().toLocaleLowerCase("tr");
 }
 
 let prismaClient: PrismaClient | null = null;

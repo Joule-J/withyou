@@ -16,6 +16,7 @@ type Props = {
   onAddQueueTracks: (musicUrls: string[], insertAfterId?: string) => void;
   onReplaceQueueTracks: (musicUrls: string[]) => void;
   onReorderQueue: (orderedTrackIds: string[]) => void;
+  onTransferHost: (targetParticipantId: string) => void;
   onAdvanceQueue: () => void;
   onPreviousQueue: () => void;
   onLeave: () => void;

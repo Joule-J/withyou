@@ -91,6 +91,73 @@ describe("Socket.IO room flow", () => {
     });
   });
 
+  it("transfers host control and enforces the new host authority", async () => {
+    const app = createApp({
+      port: 0,
+      roomCapacity: 10,
+      reconnectGraceMs: 20,
+      roomCodeLength: 6,
+      allowedOrigins: ["http://localhost:*"],
+      webDistDir: "../web/dist",
+    });
+    servers.push(app);
+    await new Promise<void>((resolve) => app.httpServer.listen(0, resolve));
+    const port = (app.httpServer.address() as AddressInfo).port;
+
+    const host = connect(port);
+    const guest = connect(port);
+    sockets.push(host, guest);
+    await Promise.all([waitFor(host, "connect"), waitFor(guest, "connect")]);
+
+    host.emit("room:create", { nickname: "Host" });
+    const hostJoined = await waitFor<{ participantId: string; snapshot: { roomCode: string } }>(host, "room:joined");
+
+    guest.emit("room:join", { roomCode: hostJoined.snapshot.roomCode, nickname: "Guest" });
+    const guestJoined = await waitFor<{ participantId: string }>(guest, "room:joined");
+
+    const hostChangedForHost = waitFor<{ hostParticipantId: string; snapshot: { hostParticipantId: string } }>(
+      host,
+      "room:host-changed",
+    );
+    const hostChangedForGuest = waitFor<{ hostParticipantId: string; snapshot: { hostParticipantId: string } }>(
+      guest,
+      "room:host-changed",
+    );
+    host.emit("room:transfer-host", { targetParticipantId: guestJoined.participantId });
+
+    await expect(hostChangedForHost).resolves.toMatchObject({
+      hostParticipantId: guestJoined.participantId,
+      snapshot: { hostParticipantId: guestJoined.participantId },
+    });
+    await expect(hostChangedForGuest).resolves.toMatchObject({
+      hostParticipantId: guestJoined.participantId,
+      snapshot: { hostParticipantId: guestJoined.participantId },
+    });
+
+    host.emit("player:command", {
+      type: "play",
+      videoId: "dQw4w9WgXcQ",
+      musicUrl: "https://music.youtube.com/watch?v=dQw4w9WgXcQ",
+      positionSeconds: 0,
+      clientCommandId: "old-host-command",
+    });
+    await expect(waitFor<{ code: string }>(host, "server:error")).resolves.toMatchObject({
+      code: "HOST_ONLY",
+    });
+
+    const playerState = waitFor<{ videoId: string }>(guest, "player:state");
+    guest.emit("player:command", {
+      type: "play",
+      videoId: "y8MArfXrn80",
+      musicUrl: "https://music.youtube.com/watch?v=y8MArfXrn80",
+      positionSeconds: 0,
+      clientCommandId: "new-host-command",
+    });
+    await expect(playerState).resolves.toMatchObject({
+      videoId: "y8MArfXrn80",
+    });
+  });
+
   it("moves to the previous queued track", async () => {
     const app = createApp({
       port: 0,

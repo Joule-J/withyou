@@ -53,6 +53,17 @@ export async function deletePlaylist(playlistId: string): Promise<void> {
   if (!response.ok) throw new Error("PLAYLIST_DELETE_FAILED");
 }
 
+export async function updatePlaylist(playlistId: string, name: string): Promise<Playlist> {
+  const response = await fetch(`/api/playlists/${playlistId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  if (!response.ok) throw new Error("PLAYLIST_UPDATE_FAILED");
+  const payload = (await response.json()) as { playlist: Playlist };
+  return payload.playlist;
+}
+
 export async function reorderPlaylist(playlistId: string, musicUrls: string[]): Promise<Playlist> {
   const response = await fetch(`/api/playlists/${playlistId}/reorder`, {
     method: "POST",

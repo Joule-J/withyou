@@ -29,6 +29,48 @@ describe("InMemoryPlaylistRepository", () => {
       },
     ]);
   });
+
+  it("rejects duplicate playlist names and allows renaming to an available name", async () => {
+    const repository = new InMemoryPlaylistRepository();
+    await repository.save({
+      name: "Love Songs",
+      tracks: [
+        {
+          title: "Song A",
+          videoId: "dQw4w9WgXcQ",
+          musicUrl: "https://music.youtube.com/watch?v=dQw4w9WgXcQ",
+        },
+      ],
+    });
+    const playlist = await repository.save({
+      name: "Roadtrip",
+      tracks: [
+        {
+          title: "Song B",
+          videoId: "y8MArfXrn80",
+          musicUrl: "https://music.youtube.com/watch?v=y8MArfXrn80",
+        },
+      ],
+    });
+
+    await expect(
+      repository.save({
+        name: "love songs",
+        tracks: [
+          {
+            title: "Song C",
+            videoId: "abc1234",
+            musicUrl: "https://music.youtube.com/watch?v=abc1234",
+          },
+        ],
+      }),
+    ).rejects.toThrowError("LIST_NAME_EXISTS");
+    await expect(repository.rename(playlist.id, "Love Songs")).rejects.toThrowError("LIST_NAME_EXISTS");
+    await expect(repository.rename(playlist.id, "Night Drive")).resolves.toMatchObject({
+      id: playlist.id,
+      name: "Night Drive",
+    });
+  });
 });
 
 describe("PrismaPlaylistRepository", () => {

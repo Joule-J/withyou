@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FlowerBurst } from "./components/flower-burst";
 import { Landing } from "./components/landing";
 import { Room } from "./components/room";
@@ -9,6 +9,100 @@ export default function App() {
   const initialRoomCode = useMemo(() => roomCodeFromPath(window.location.pathname), []);
   const room = useRoom(initialRoomCode);
   const isMobile = useMemo(() => typeof navigator !== "undefined" && /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent), []);
+  const [vinylShift, setVinylShift] = useState(false);
+  const [decorVinylSrc, setDecorVinylSrc] = useState("/vinyls/13.png");
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
+  const lastTrackIdRef = useRef<string | null>(null);
+  const vinylShiftTimeoutRef = useRef<number | null>(null);
+  const guardedRoomCodeRef = useRef<string | null>(null);
+
+  const triggerVinylShift = useCallback((nextVinylSrc?: string) => {
+    if (vinylShiftTimeoutRef.current !== null) {
+      window.clearTimeout(vinylShiftTimeoutRef.current);
+    }
+
+    setVinylShift(false);
+    window.requestAnimationFrame(() => {
+      setVinylShift(true);
+      if (nextVinylSrc) {
+        window.setTimeout(() => setDecorVinylSrc(nextVinylSrc), 650);
+      }
+      vinylShiftTimeoutRef.current = window.setTimeout(() => {
+        setVinylShift(false);
+        vinylShiftTimeoutRef.current = null;
+      }, 1_550);
+    });
+  }, []);
+
+  useEffect(() => {
+    const trackId = room.snapshot?.playback?.videoId ?? null;
+    if (!trackId) return;
+    if (lastTrackIdRef.current === null) {
+      lastTrackIdRef.current = trackId;
+      return;
+    }
+    if (lastTrackIdRef.current === trackId) return;
+
+    lastTrackIdRef.current = trackId;
+    triggerVinylShift();
+  }, [room.snapshot?.playback?.videoId, triggerVinylShift]);
+
+  useEffect(() => {
+    return () => {
+      if (vinylShiftTimeoutRef.current !== null) {
+        window.clearTimeout(vinylShiftTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const roomCode = room.snapshot?.roomCode ?? null;
+    if (!roomCode || !room.participantId) {
+      guardedRoomCodeRef.current = null;
+      setShowExitConfirm(false);
+      return;
+    }
+
+    if (guardedRoomCodeRef.current !== roomCode) {
+      guardedRoomCodeRef.current = roomCode;
+      window.history.pushState({ withyouRoomExitGuard: true, roomCode }, "", window.location.pathname);
+    }
+
+    const snapshotStillActive = (code: string) => guardedRoomCodeRef.current === code && room.snapshot?.roomCode === code;
+
+    const handlePopState = () => {
+      if (!snapshotStillActive(roomCode)) return;
+      window.history.pushState({ withyouRoomExitGuard: true, roomCode }, "", `/room/${roomCode}`);
+      setShowExitConfirm(true);
+    };
+
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!snapshotStillActive(roomCode)) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [room.snapshot?.roomCode, room.participantId, room.leaveRoom]);
+
+  const requestLeaveRoom = useCallback(() => {
+    setShowExitConfirm(true);
+  }, []);
+
+  const confirmLeaveRoom = useCallback(() => {
+    guardedRoomCodeRef.current = null;
+    setShowExitConfirm(false);
+    room.leaveRoom();
+  }, [room.leaveRoom]);
+
+  const cancelLeaveRoom = useCallback(() => {
+    setShowExitConfirm(false);
+  }, []);
 
   if (room.snapshot && room.participantId) {
     if (isMobile) {
@@ -25,10 +119,31 @@ export default function App() {
             onAddQueueTracks={room.addQueueTracks}
             onReplaceQueueTracks={room.replaceQueueTracks}
             onReorderQueue={room.reorderQueue}
+            onTransferHost={room.transferHost}
             onAdvanceQueue={room.advanceQueue}
             onPreviousQueue={room.previousQueue}
-            onLeave={room.leaveRoom}
+            onLeave={requestLeaveRoom}
           />
+          {showExitConfirm ? (
+            <div className="confirm-overlay" role="dialog" aria-modal="true" aria-label="Odadan çıkış onayı">
+              <div className="confirm-overlay-backdrop" onClick={cancelLeaveRoom} />
+              <section className="confirm-panel">
+                <div className="confirm-copy">
+                  <span className="modal-kicker">ARE YOU SURE?</span>
+                  <h2>Odadan çık</h2>
+                  <p>Bu oda görünümünden ayrılacaksın.</p>
+                </div>
+                <div className="confirm-actions">
+                  <button type="button" className="confirm-secondary" onClick={cancelLeaveRoom}>
+                    Kal
+                  </button>
+                  <button type="button" className="confirm-danger" onClick={confirmLeaveRoom}>
+                    Çık
+                  </button>
+                </div>
+              </section>
+            </div>
+          ) : null}
         </>
       );
     }
@@ -36,6 +151,12 @@ export default function App() {
     return (
       <>
         <FlowerBurst />
+        <div
+          className={`vinyl-decor spinning${room.snapshot.playback?.isPlaying ? "" : " paused"}${vinylShift ? " shifting" : ""}`}
+          aria-hidden="true"
+        >
+          <img src={decorVinylSrc} alt="" />
+        </div>
         <Room
           snapshot={room.snapshot}
           participantId={room.participantId}
@@ -46,10 +167,32 @@ export default function App() {
           onAddQueueTracks={room.addQueueTracks}
           onReplaceQueueTracks={room.replaceQueueTracks}
           onReorderQueue={room.reorderQueue}
+          onTransferHost={room.transferHost}
           onAdvanceQueue={room.advanceQueue}
           onPreviousQueue={room.previousQueue}
-          onLeave={room.leaveRoom}
+          onPlaylistVinylSwap={triggerVinylShift}
+          onLeave={requestLeaveRoom}
         />
+        {showExitConfirm ? (
+          <div className="confirm-overlay" role="dialog" aria-modal="true" aria-label="Odadan çıkış onayı">
+            <div className="confirm-overlay-backdrop" onClick={cancelLeaveRoom} />
+            <section className="confirm-panel">
+              <div className="confirm-copy">
+                <span className="modal-kicker">ARE YOU SURE?</span>
+                <h2>Odadan çık</h2>
+                <p>Bu oda görünümünden ayrılacaksın.</p>
+              </div>
+              <div className="confirm-actions">
+                <button type="button" className="confirm-secondary" onClick={cancelLeaveRoom}>
+                  Kal
+                </button>
+                <button type="button" className="confirm-danger" onClick={confirmLeaveRoom}>
+                  Çık
+                </button>
+              </div>
+            </section>
+          </div>
+        ) : null}
       </>
     );
   }

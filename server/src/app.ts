@@ -18,11 +18,13 @@ import {
   playerCommandSchema,
   playlistReorderSchema,
   playlistSaveSchema,
+  playlistUpdateSchema,
   queueAddSchema,
   queueReorderSchema,
   queueReplaceSchema,
   reconnectRoomSchema,
   stateReportSchema,
+  transferHostSchema,
 } from "./schemas.js";
 
 type Session = {
@@ -101,6 +103,19 @@ export function createApp(config: Config): AppInstance {
       response.json({ playlist });
     } catch {
       response.status(400).json({ message: "Liste sirasi guncellenemedi." });
+    }
+  });
+  app.patch("/api/playlists/:playlistId", async (request, response) => {
+    const parsed = playlistUpdateSchema.safeParse(request.body);
+    if (!parsed.success) {
+      response.status(400).json({ message: "Gecersiz liste verisi." });
+      return;
+    }
+    try {
+      const playlist = await playlistService.renamePlaylist(request.params.playlistId, parsed.data.name);
+      response.json({ playlist });
+    } catch (error) {
+      response.status(400).json({ message: mapPlaylistError(error) });
     }
   });
   app.delete("/api/playlists/:playlistId", async (request, response) => {
@@ -203,6 +218,17 @@ export function createApp(config: Config): AppInstance {
         const session = getSession(socket);
         if (!session || session.roomCode !== data.roomCode) return;
         removeSessionParticipant(socket, io, store, disconnectTimers);
+      });
+    });
+
+    socket.on("room:transfer-host", (payload) => {
+      void handle(socket, transferHostSchema, payload, async (data) => {
+        const session = requireSession(socket);
+        const result = store.transferHost(session.roomCode, session.participantId, data.targetParticipantId);
+        io.to(session.roomCode).emit("room:host-changed", {
+          hostParticipantId: result.newHostId,
+          snapshot: store.snapshot(result.room),
+        });
       });
     });
 
@@ -420,6 +446,7 @@ class RequestError extends Error {
 function mapPlaylistError(error: unknown): string {
   if (!(error instanceof Error)) return "Liste kaydedilemedi.";
   if (error.message === "LIST_NAME_REQUIRED") return "Liste ismi gerekli.";
+  if (error.message === "LIST_NAME_EXISTS") return "Bu isimde bir liste zaten var.";
   if (error.message === "LIST_TRACKS_REQUIRED") return "Listede en az bir sarki olmali.";
   if (error.message === "INVALID_MUSIC_URL") return "Listede gecersiz YouTube Music baglantisi var.";
   return "Liste kaydedilemedi.";
