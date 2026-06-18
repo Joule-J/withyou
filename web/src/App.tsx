@@ -28,12 +28,12 @@ export default function App() {
     window.requestAnimationFrame(() => {
       setVinylShift(true);
       if (nextVinylSrc) {
-        window.setTimeout(() => setDecorVinylSrc(nextVinylSrc), 650);
+        window.setTimeout(() => setDecorVinylSrc(nextVinylSrc), 430);
       }
       vinylShiftTimeoutRef.current = window.setTimeout(() => {
         setVinylShift(false);
         vinylShiftTimeoutRef.current = null;
-      }, 1_550);
+      }, 920);
     });
   }, []);
 

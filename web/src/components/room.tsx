@@ -661,15 +661,6 @@ export function Room({
                 <SidebarGlyph kind="note" />
                 <h2>Şarkılar</h2>
               </div>
-              <button
-                type="button"
-                className="refresh-button"
-                disabled={!isHost || queue.length === 0}
-                onClick={() => onReplaceQueueTracks(queue.map((track) => track.musicUrl))}
-              >
-                <RefreshGlyph />
-                Yenile
-              </button>
             </div>
             <ol className="queue-list rich-queue-list" ref={queueListRef as any}>
               {queue.length > 0 ? (

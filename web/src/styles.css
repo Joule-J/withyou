@@ -495,6 +495,7 @@ label {
   clip-path: circle(50% at 50% 50%);
   overflow: hidden;
   transform: translateY(-50%);
+  will-change: transform, opacity;
 }
 
 .vinyl-decor img {
@@ -517,7 +518,7 @@ label {
 }
 
 .vinyl-decor.shifting {
-  animation: vinyl-swap 1.55s cubic-bezier(0.22, 0.8, 0.22, 1);
+  animation: vinyl-swap 0.92s cubic-bezier(0.22, 0.8, 0.22, 1);
 }
 
 .room-header,
@@ -539,22 +540,22 @@ label {
 
 @keyframes vinyl-swap {
   0% {
-    transform: translateY(-50%) translateX(0);
+    transform: translateY(-50%) scale(1);
     opacity: 1;
   }
 
-  42% {
-    transform: translateY(-50%) translateX(42%);
-    opacity: 0;
+  48% {
+    transform: translateY(-50%) scale(0.985);
+    opacity: 0.18;
   }
 
-  43% {
-    transform: translateY(-50%) translateX(54%);
-    opacity: 0;
+  52% {
+    transform: translateY(-50%) scale(1.015);
+    opacity: 0.18;
   }
 
   100% {
-    transform: translateY(-50%) translateX(0);
+    transform: translateY(-50%) scale(1);
     opacity: 1;
   }
 }
@@ -1085,17 +1086,49 @@ label {
 .player-transport-panel {
   padding: 1rem 1.05rem;
   border-radius: 22px;
-  border: 1px solid rgba(36, 34, 36, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.34);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(255, 251, 252, 0.98));
+    linear-gradient(180deg, rgba(255, 255, 255, 0.32), rgba(255, 255, 255, 0.18));
   box-shadow:
-    0 14px 36px rgba(36, 34, 36, 0.07),
-    inset 0 1px 0 rgba(255, 255, 255, 0.94);
+    0 18px 42px rgba(36, 34, 36, 0.09),
+    inset 0 1px 0 rgba(255, 255, 255, 0.56);
+  backdrop-filter: blur(24px) saturate(1.16);
+  -webkit-backdrop-filter: blur(24px) saturate(1.16);
   gap: 0.75rem;
+  overflow: hidden;
 }
 
 .player-transport-panel::before {
-  display: none;
+  content: "";
+  position: absolute;
+  inset: auto auto -3.4rem -2.8rem;
+  width: 11rem;
+  height: 11rem;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at center, rgba(255, 255, 255, 0.24) 0 14%, transparent 15%),
+    repeating-radial-gradient(circle at center, rgba(245, 95, 145, 0.08) 0 5%, transparent 5% 11%),
+    conic-gradient(from 0deg, rgba(245, 95, 145, 0.12), rgba(255, 255, 255, 0.02), rgba(245, 95, 145, 0.1), rgba(255, 255, 255, 0.02), rgba(245, 95, 145, 0.12));
+  opacity: 0.38;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.player-transport-panel::after {
+  content: "";
+  position: absolute;
+  top: -3.4rem;
+  right: -2.2rem;
+  width: 9rem;
+  height: 9rem;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at center, rgba(255, 255, 255, 0.2) 0 12%, transparent 13%),
+    repeating-radial-gradient(circle at center, rgba(123, 104, 238, 0.06) 0 4%, transparent 4% 10%),
+    conic-gradient(from 180deg, rgba(255, 255, 255, 0.04), rgba(245, 95, 145, 0.12), rgba(255, 255, 255, 0.04), rgba(245, 95, 145, 0.1), rgba(255, 255, 255, 0.04));
+  opacity: 0.24;
+  pointer-events: none;
+  z-index: 0;
 }
 
 .player-transport-panel > * {
@@ -1176,23 +1209,34 @@ label {
   width: 100%;
   min-height: 3rem;
   padding: 0.48rem 0.58rem;
-  border: 1px solid rgba(255, 255, 255, 0.34);
+  border: 1px solid rgba(255, 255, 255, 0.26);
   border-radius: 20px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.24));
-  box-shadow: 0 18px 34px rgba(232, 172, 192, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.62);
-  backdrop-filter: blur(18px) saturate(1.18);
-  -webkit-backdrop-filter: blur(18px) saturate(1.18);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.1));
+  box-shadow: 0 14px 28px rgba(232, 172, 192, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.42);
+  backdrop-filter: blur(22px) saturate(1.2);
+  -webkit-backdrop-filter: blur(22px) saturate(1.2);
   text-align: left;
+  transition: border-color 180ms ease, background 180ms ease, opacity 180ms ease;
 }
 
 .neighbor-track-button {
   color: inherit;
   cursor: pointer;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  opacity: 0.72;
 }
 
 .neighbor-track-button:hover:not(:disabled) {
   border-color: rgba(255, 208, 225, 0.48);
-  background: linear-gradient(180deg, rgba(255, 246, 250, 0.5), rgba(255, 240, 246, 0.3));
+  background: linear-gradient(180deg, rgba(255, 246, 250, 0.28), rgba(255, 240, 246, 0.16));
+  box-shadow: 0 14px 28px rgba(232, 172, 192, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.42);
+  backdrop-filter: blur(18px) saturate(1.12);
+  -webkit-backdrop-filter: blur(18px) saturate(1.12);
+  opacity: 1;
 }
 
 .neighbor-track-button:disabled {
@@ -1201,14 +1245,21 @@ label {
 }
 
 .current-track-inline {
+  grid-column: 2;
   justify-self: center;
-  background: linear-gradient(180deg, rgba(255, 244, 248, 0.48), rgba(255, 237, 244, 0.28));
-  border-color: rgba(255, 208, 225, 0.46);
+  width: min(100%, 25rem);
+  background: linear-gradient(180deg, rgba(255, 244, 248, 0.24), rgba(255, 237, 244, 0.12));
+  border-color: rgba(255, 208, 225, 0.34);
+}
+
+.current-track-inline .neighbor-copy {
+  text-align: center;
 }
 
 .neighbor-track-button--next {
   grid-template-columns: minmax(0, 1fr) 2.4rem;
   text-align: right;
+  justify-self: end;
 }
 
 .neighbor-track-button--next .neighbor-copy {
