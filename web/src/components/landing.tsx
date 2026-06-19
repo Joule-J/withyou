@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { MusicMark } from "./music-mark";
 
 type Props = {
   initialRoomCode: string;
@@ -30,13 +31,13 @@ export function Landing({ initialRoomCode, connected, error, onCreate, onJoin }:
   return (
     <main className="landing-shell">
       <section className="hero">
-        <p className="eyebrow">WITHYOU</p>
+        <p className="eyebrow">LISTEN WITH</p>
         <div className="hero-logo-lockup">
-          <img src="/love.png" alt="" aria-hidden="true" />
-          <h1>WithYou</h1>
+          <MusicMark className="hero-mark" />
+          <h1>Listen With</h1>
         </div>
         <p className="hero-copy">
-          Aynı parçayı aynı anda dinlemek için oda aç, YouTube Music bağlantısını ekle ve arkadaşlarınla senkron kal.
+          Bir oda aç, parçayı paylaş ve dinlemeyi herkes için senkron tut.
         </p>
       </section>
 

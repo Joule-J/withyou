@@ -18,6 +18,7 @@ import {
   targetPosition,
 } from "../lib/sync";
 import type { PlayerCommand, RoomSnapshot } from "../types";
+import { MusicMark } from "./music-mark";
 import { YouTubePlayer, type YouTubePlayerHandle } from "./youtube-player";
 
 const VINYL_ARTS = [
@@ -436,10 +437,10 @@ export function Room({
     <main className="room-shell">
       <header className="room-header">
         <div className="brand-lockup">
-          <p className="eyebrow">WITHYOU</p>
+          <p className="eyebrow">LISTEN WITH</p>
           <div className="brand-row">
-            <img className="brand-logo" src="/love.png" alt="" aria-hidden="true" />
-            <h1>WithYou</h1>
+            <MusicMark className="brand-logo" />
+            <h1>Listen With</h1>
             <button className="room-code" onClick={copyInvite} title="Oda davet bağlantısını kopyala">
               {snapshot.roomCode}
             </button>
@@ -469,8 +470,8 @@ export function Room({
         <section className="player-panel">
           <div className="panel-title wide">
             <div>
-              <h2>Birlikte dinleyelim</h2>
-              <p className="panel-copy">Çünkü seni çoooooook seviyorummmmmmmm ♥️♥️</p>
+              <h2>Birlikte dinleme odası</h2>
+              <p className="panel-copy">Host parçayı yönetir, oda aynı anda dinler.</p>
             </div>
             {playback ? <span>{formatTime(position)} / {formatTime(duration)}</span> : null}
           </div>
@@ -484,7 +485,7 @@ export function Room({
             />
           ) : (
             <div className="player-frame empty-player">
-              <img src="/love.png" alt="" aria-hidden="true" />
+              <MusicMark className="empty-player-mark" />
               <span>Şarkı bekleniyor</span>
             </div>
           )}
