@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import { listPlaylists, type Playlist } from "../lib/playlists";
 import { parseMusicUrl } from "../lib/music-url";
 import type { PlayerCommand, RoomSnapshot } from "../types";
-import { MusicMark } from "./music-mark";
 import type { YouTubePlayerHandle } from "./youtube-player";
 import { YouTubePlayer } from "./youtube-player";
 import { POST_ACTION_SETTLE_MS, canCorrectDrift, shouldCorrectDrift, targetPosition } from "../lib/sync";
@@ -195,8 +194,8 @@ export function MobileRoom({
     };
 
     mediaSession.metadata = new MediaMetadata({
-      title: playback.title ?? "Listen With",
-      artist: "Listen With",
+      title: playback.title ?? "WithYou",
+      artist: "WithYou",
       album: snapshot.roomCode,
       artwork: playback.thumbnailUrl
         ? [{ src: playback.thumbnailUrl, sizes: "512x512", type: "image/jpeg" }]
@@ -341,10 +340,7 @@ export function MobileRoom({
     <div className="mobile-shell">
       <header className="mobile-header">
         <div className="mobile-brand">
-          <div className="mobile-brand-lockup">
-            <MusicMark className="mobile-brand-logo" />
-            <strong>Listen With</strong>
-          </div>
+          <strong>WithYou</strong>
           <button className="mobile-leave" onClick={onLeave}>Çık</button>
         </div>
         <div className="mobile-status">{status}</div>
